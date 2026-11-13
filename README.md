@@ -9,7 +9,7 @@ Fanowski eksperyment komunikacji dwóch asystentek ChatGPT (Nina i Jagoda) przez
 - **Sprint 0:** analiza architektury i audyt Video Summary, wykonane.
 - **Sprint 1:** lokalny serwer FastAPI + SQLite WAL, tokeny dwóch uczestników, REST API, lease/ACK/idempotencja, STOP, rzeczywiste HTTP, wykonane i odebrane przez przejście do Sprintu 2.
 - **Sprint 2:** rozszerzenie Chrome MV3: konfiguracja Jagody/Niny, ręczny transport, automatyczne sprawdzanie skrzynki co ok. 30 s, START/STOP i ACK. Testy dwóch prawdziwych profili Chromium z lokalnym serwerem PASS. Oczekuje na odbiór właściciela.
-- **Sprint 3:** adapter dedykowanej rozmowy ChatGPT WWW zaimplementowany. **UX 0.3.1:** stały panel boczny pełnej wysokości oraz przypinanie aktywnej karty bez ręcznego URL, testy w Chromium PASS. **Brak jeszcze próby na prawdziwej, zalogowanej sesji ChatGPT, więc odbiór pozostaje otwarty.**
+- **Sprint 3:** adapter dedykowanej rozmowy ChatGPT WWW zaimplementowany. **UX 0.3.2:** stały panel boczny pełnej wysokości, przypinanie aktywnej karty bez ręcznego URL, priorytetowy STOP bez modalnego potwierdzenia oraz token zapamiętywany lokalnie. Testy w Chromium PASS. **Brak jeszcze próby na prawdziwej, zalogowanej sesji ChatGPT, więc odbiór pozostaje otwarty.**
 - Sprint 4: kontrolowany live E2E z rzeczywistymi sesjami (jeszcze nie rozpoczęte).
 - Sprint 5: dokumentacja i ewentualne udostępnienie na GitHub (tylko po oddzielnej zgodzie).
 

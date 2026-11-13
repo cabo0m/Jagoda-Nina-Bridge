@@ -209,8 +209,9 @@ test("two isolated extension workers exchange two messages over REAL HTTP and ST
     const initial = await nina.good({type: "GET_STATUS"});
     assert.equal(initial.tokenReady, true);
     assert.ok(!JSON.stringify(initial).includes(setup.nina));
-    assert.ok(!JSON.stringify(nina.local.data).includes(setup.nina));
-    assert.equal(nina.session.data[core.TOKEN_KEY], setup.nina);
+    assert.ok(!JSON.stringify(nina.local.data[core.CONFIG_KEY]).includes(setup.nina));
+    assert.equal(nina.local.data[core.TOKEN_KEY], setup.nina);
+    assert.equal(nina.session.data[core.TOKEN_KEY], undefined);
     await nina.good({type: "START"});
     await jagoda.good({type: "START"});
     assert.ok(nina.alarms.has(core.ALARM_NAME));
@@ -299,7 +300,7 @@ test("STOP is local-first and reports remote failure until explicit retry", asyn
   });
 });
 
-test("forbidden origin and session token expiry block all actions", async () => {
+test("forbidden origin and persistent local token survive loss of session storage", async () => {
   const worker = createWorker();
   const fake = {
     serverUrl: "http://127.0.0.1:8765",
@@ -310,8 +311,12 @@ test("forbidden origin and session token expiry block all actions", async () => 
   worker.grant(core.permissionOrigin(fake.serverUrl));
   await worker.good({type: "CONFIGURE", config: fake, token: "x".repeat(40)});
   await worker.session.remove(core.TOKEN_KEY);
-  const state = await worker.good({type: "GET_STATUS"});
-  assert.equal(state.tokenReady, false);
+  const retained = await worker.good({type: "GET_STATUS"});
+  assert.equal(retained.tokenReady, true);
+  assert.equal(worker.local.data[core.TOKEN_KEY], "x".repeat(40));
+  await worker.local.remove(core.TOKEN_KEY);
+  const lost = await worker.good({type: "GET_STATUS"});
+  assert.equal(lost.tokenReady, false);
   await worker.bad({type: "START"}, /token/i);
 });
 
@@ -336,4 +341,59 @@ test("ChatGPT thread binding requires exact dedicated UUID and no other paths", 
   assert.equal(adapter.validateBridgeOutput("  Cześć Nino  "), "Cześć Nino");
   assert.throws(() => adapter.validateBridgeOutput(" ".repeat(5)));
   assert.throws(() => adapter.validateBridgeOutput("x".repeat(4001)));
+});
+
+test("emergency STOP bypasses a blocked inbox fetch and never resumes stale polling", async () => {
+  await withServer(async ({base, setup}) => {
+    let blockInbox = false;
+    let releaseInbox = null;
+    const delayed = async (url, options) => {
+      if (blockInbox && url.endsWith("/v1/inbox?limit=10")) {
+        await new Promise(resolve => { releaseInbox = resolve; });
+      }
+      return fetch(url, options);
+    };
+    const nina = createWorker(delayed);
+    await setupWorker(nina, base, setup, "nina");
+    await nina.good({type: "START"});
+    blockInbox = true;
+    const delayedSync = nina.good({type: "SYNC"});
+    try {
+      for (let i = 0; i < 100 && !releaseInbox; ++i) await sleep(20);
+      assert.equal(typeof releaseInbox, "function", "Fetch must be held before STOP");
+      const result = await Promise.race([
+        nina.good({type: "STOP"}),
+        sleep(4000).then(() => {throw new Error("STOP waited for a blocked inbox fetch");}),
+      ]);
+      assert.equal(result.localStopped, true);
+      assert.equal(result.remoteStopped, true);
+      assert.equal(nina.local.data[core.ACTIVE_KEY], false);
+    } finally {
+      if (releaseInbox) releaseInbox();
+    }
+    await delayedSync;
+    const final = await nina.good({type: "GET_STATUS"});
+    assert.equal(final.snapshot.conversation.status, "stopped");
+    assert.equal(final.active, false);
+    assert.equal(final.snapshot.remoteStopUnknown, false);
+  });
+});
+
+test("STOP works locally even after both token stores were erased", async () => {
+  const worker = createWorker();
+  const config = {
+    serverUrl: "http://127.0.0.1:8765",
+    conversationId: "00000000-0000-0000-0000-000000000001",
+    participant: "jagoda",
+  };
+  worker.grant(core.permissionOrigin(config.serverUrl));
+  await worker.good({type: "CONFIGURE", config, token: "x".repeat(40)});
+  await worker.local.remove(core.TOKEN_KEY);
+  await worker.session.remove(core.TOKEN_KEY);
+  await worker.local.set({[core.ACTIVE_KEY]: true});
+  const status = await worker.good({type: "STOP"});
+  assert.equal(status.localStopped, true);
+  assert.equal(status.remoteStopped, false);
+  assert.equal(worker.local.data[core.ACTIVE_KEY], false);
+  assert.equal((await worker.good({type: "GET_STATUS"})).snapshot.remoteStopUnknown, true);
 });

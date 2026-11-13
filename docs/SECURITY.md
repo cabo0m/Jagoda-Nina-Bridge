@@ -27,11 +27,15 @@ Serwer zapisuje identyfikatory uczestników, UUID rozmowy/wiadomości, treść d
 - Jedna baza kodu MV3 dla Jagody i Niny. Użytkownik musi jawnie wprowadzić token i uruchomić synchronizację przyciskiem START.
 - Wymagane uprawnienia: `storage`, `alarms` i adresy testowe `http://127.0.0.1/*`, `http://localhost/*`. Zewnętrzny adres HTTPS wymaga osobnej zgody wyłącznie na jego host. Chrome nie pozwala zawęzić wzorca do pojedynczego portu.
 - Brak `tabs`, `scripting`, `activeTab`, `cookies`, `history`, `content_scripts`; rozszerzenie nie odczytuje sesji ChatGPT i nie ma dostępu do innych rozmów.
-- W `chrome.storage.local` przechowywane są jedynie niesekretne ustawienia i lokalny stan uruchomienia. Token, lease i niepotwierdzona wysyłka znajdują się tylko w `chrome.storage.session`, niedostępnym dla content scripts. Dane sesji znikają po restarcie Chrome lub przeładowaniu rozszerzenia.
+- **Historycznie w Sprint 2** token znajdował się w `chrome.storage.session`, a `chrome.storage.local` przechowywał tylko niesekretne dane. **Od 0.3.2** token jest osobnym chronionym kluczem `chrome.storage.local` i przeżywa restart Chrome. Lease, skrzynka i niepewne wysyłki nadal są sesyjne. Token nie jest dodatkowo szyfrowany na dysku (opis bezpieczeństwa niżej).
 - Dostęp do API odbywa się z service workera z nagłówkiem Bearer, tylko do wybranego serwera. Lokalny HTTP jest do testów; zdalne endpointy muszą używać HTTPS. Redirecty i cookies są wyłączone.
 - Wiadomości serwera wyświetlane przez `textContent`, bez wykonywania HTML. Worker akceptuje polecenia tylko z własnego `chrome-extension://<id>/popup.html`, nie z kart witryn.
 - STOP najpierw wyłącza lokalne odpytywanie, potem zatrzymuje rozmowę po stronie serwera; brak potwierdzenia sieciowego jest zgłaszany i wymaga świadomego ponowienia.
 - Wcześniejsze testy workera oraz dwa rzeczywiste profile Chromium wykazały poprawny przebieg, jednak **nie zweryfikowano jeszcze zdalnego HTTPS, zgody na zewnętrzną domenę ani instalacji Maćka**.
+
+## Utrwalanie tokenu uczestniczki (0.3.2)
+
+Token po zatwierdzeniu konfiguracji przechowywany jest w osobnym kluczu `chrome.storage.local` ograniczonym do `TRUSTED_CONTEXTS`, aby nie ginął po aktualizacji rozszerzenia. **Nie jest dodatkowo szyfrowany w profilu Chrome**. Profil przeglądarki należy chronić na poziomie systemu operacyjnego; skrypty stron nie mają dostępu do klucza poprzez API storage. Token przechowywany wcześniej wyłącznie w `chrome.storage.session`, który już wygasł, wymaga jednorazowego ponownego wpisania. START po restarcie nie włącza się automatycznie. STOP nie używa `confirm()` i może zadziałać lokalnie nawet bez tokenu; zdalny sukces jest wyświetlany wyłącznie po potwierdzeniu HTTP. Szczegóły: `STOP-TOKEN-0.3.2.md`.
 
 ## Adapter ChatGPT (Sprint 3)
 

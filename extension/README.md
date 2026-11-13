@@ -1,10 +1,10 @@
 # Jagoda–Nina Bridge: transport Chrome MV3 (Sprint 2)
 
-**Uwaga:** poniższy dokument opisuje transport Sprintu 2. Aktualna wersja 0.3.1 używa **stałego panelu bocznego Chrome**, nie zamykanego popupu. Aby go otworzyć, kliknij ikonę rozszerzenia; szczegóły [SIDEPANEL-0.3.1.md](../docs/SIDEPANEL-0.3.1.md). Adapter ChatGPT opisano w [CHATGPT-ADAPTER.md](CHATGPT-ADAPTER.md).
+**Uwaga:** poniższy dokument opisuje transport Sprintu 2. Aktualna wersja 0.3.2 używa **stałego panelu bocznego Chrome**, nie zamykanego popupu. Aby go otworzyć, kliknij ikonę rozszerzenia; szczegóły [SIDEPANEL-0.3.1.md](../docs/SIDEPANEL-0.3.1.md). Adapter ChatGPT opisano w [CHATGPT-ADAPTER.md](CHATGPT-ADAPTER.md). Poprawka priorytetowego STOP i trwałości tokenu jest opisana w [STOP-TOKEN-0.3.2.md](../docs/STOP-TOKEN-0.3.2.md).
 
 Sprint 2, wersja 0.2.0. Jeden kod dla dwóch niezależnych uczestniczek.
 
-**Obecny zakres:** konfiguracja serwera i tożsamości, lokalne poświadczenia sesyjne, odbieranie wiadomości, ręczne wpisywanie i wysyłanie, ACK, synchronizacja w tle przez Chrome Alarms, przycisk START i nieodwracalny STOP. **Bez dostępu do kart ani rozmów ChatGPT.**
+**Obecny zakres:** konfiguracja serwera i tożsamości, poświadczenia w chronionym magazynie lokalnym (od 0.3.2), odbieranie wiadomości, ręczne wpisywanie i wysyłanie, ACK, synchronizacja w tle przez Chrome Alarms, przycisk START i nieodwracalny STOP. **Bez dostępu do kart ani rozmów ChatGPT.**
 
 ## Instalacja ręczna
 
@@ -22,7 +22,7 @@ Nie ma jeszcze automatycznego przekazywania wiadomości do modeli. Cały przebie
 
 | Uprawnienie | Po co |
 |---|---|
-| `storage` | Konfiguracja, token w pamięci sesji, stan skrzynki |
+| `storage` | Konfiguracja i stan skrzynki; od 0.3.2 token w `storage.local` (tylko zaufane konteksty) |
 | `alarms` | Odpytywanie serwera co około 30 s |
 | `http://127.0.0.1/*`, `http://localhost/*` | Wymagane lokalne połączenie z serwerem testowym |
 | Opcjonalne `https://*/*` | Katalog dozwolonych wzorców. Użytkownik udziela zgody wyłącznie na podaną konkretną domenę HTTPS podczas konfiguracji |
@@ -33,8 +33,8 @@ Chrome nie pozwala ograniczyć wzorca uprawnienia do pojedynczego portu. Rozszer
 
 ## Przechowywanie danych
 
-- `chrome.storage.local`: adres serwera, UUID rozmowy, uczestniczka i stan lokalnego START/STOP, **bez tokenu**.
-- `chrome.storage.session`: token uczestniczki, własna skrzynka, potwierdzenia lease i klucz idempotencji niepewnej wysyłki. Po restarcie Chrome lub przeładowaniu rozszerzenia dane sesji znikają i trzeba ponownie podać token.
+- `chrome.storage.local`: adres serwera, UUID rozmowy, uczestniczka, stan START/STOP oraz **od 0.3.2 osobny klucz tokenu** (nie jest szyfrowany dodatkowo, lecz dostęp z API storage ograniczono do zaufanych kontekstów).
+- `chrome.storage.session`: własna skrzynka, lease i klucz idempotencji niepewnej wysyłki; w 0.2.0 także token. Od 0.3.2 token jest trwale zapisany w `chrome.storage.local` i po restarcie nie trzeba podawać go ponownie, jeśli był już zapisany w nowej wersji.
 - Poświadczenia nie są przesyłane do stron internetowych; wysyłane są tylko do wskazanego serwera w nagłówku `Authorization: Bearer`.
 - Popup wyświetla treść wiadomości przez `textContent`, nigdy przez `innerHTML`. Nie ma skryptów wstrzykiwanych na strony WWW.
 

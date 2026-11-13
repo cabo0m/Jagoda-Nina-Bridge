@@ -1,8 +1,9 @@
-import {normalizeConfig, permissionOrigin, SNAPSHOT_KEY} from "./bridge-core.mjs";
+import {ACTIVE_KEY, ALARM_NAME, normalizeConfig, permissionOrigin, SNAPSHOT_KEY} from "./bridge-core.mjs";
 
 const $ = id => document.getElementById(id);
 let lastState = null;
 let busy = false;
+let stopping = false;
 let initialFormLoaded = false;
 
 function tell(text, isError = false) {
@@ -13,7 +14,8 @@ function tell(text, isError = false) {
 
 function setBusy(value) {
   busy = value;
-  for (const id of ["save", "start", "sync", "stop", "send", "bind-chatgpt", "bind-current-chatgpt", "unbind-chatgpt"]) {
+  // Emergency STOP must never be disabled by a concurrent operation.
+  for (const id of ["save", "start", "sync", "send", "bind-chatgpt", "bind-current-chatgpt", "unbind-chatgpt"]) {
     $(id).disabled = value;
   }
 }
@@ -89,7 +91,7 @@ function render(state) {
   $("start").disabled = busy || !state.tokenReady || state.active ||
     conversation.status === "stopped" || Boolean(snapshot.remoteStopUnknown);
   $("sync").disabled = busy || !state.tokenReady;
-  $("stop").disabled = busy || !state.config || (
+  $("stop").disabled = stopping || (
     conversation.status === "stopped" && !snapshot.remoteStopUnknown
   );
   const received = Array.isArray(snapshot.messages) ? snapshot.messages : [];
@@ -238,16 +240,33 @@ $("unbind-chatgpt").addEventListener("click", () => void doAction(async () => {
   return result;
 }));
 
-$("stop").addEventListener("click", () => {
-  if (!confirm("STOP zakończy całą rozmowę również na serwerze. Kontynuować?")) return;
-  void doAction(async () => {
+$("stop").addEventListener("click", async () => {
+  if (stopping) return;
+  stopping = true;
+  $("stop").disabled = true;
+  tell("STOP: zatrzymuję lokalnie i wysyłam żądanie do serwera...");
+  // First shut down polling in the local extension context, even if
+  // the background worker is busy, disconnected or restarting.
+  try {
+    await chrome.storage.local.set({[ACTIVE_KEY]: false});
+    await chrome.alarms.clear(ALARM_NAME);
     const result = await call("STOP");
     tell(result.remoteStopped
-      ? "Rozmowa zatrzymana lokalnie i na serwerze."
-      : "Zatrzymano lokalnie. STOP na serwerze NIEPOTWIERDZONY, ponów później.",
+      ? "STOP POTWIERDZONY: rozmowa zatrzymana lokalnie i na serwerze."
+      : "STOP LOKALNY. Serwer nie potwierdził zatrzymania. Ponów STOP po odzyskaniu połączenia.",
       !result.remoteStopped);
-    return call("GET_STATUS");
-  });
+  } catch (error) {
+    tell("STOP LOKALNY. Nie udało się potwierdzić serwera: " +
+      String(error?.message || error).slice(0, 210) + ". Ponów STOP.", true);
+  } finally {
+    stopping = false;
+    $("stop").disabled = false;
+    try {
+      render(await call("GET_STATUS"));
+    } catch {
+      // Preserve the visible emergency-stop error if the worker is unavailable.
+    }
+  }
 });
 
 // Keep an open popup in sync with worker polling; no extra server requests.

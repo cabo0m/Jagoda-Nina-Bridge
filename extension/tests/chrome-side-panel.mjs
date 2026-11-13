@@ -40,7 +40,7 @@ try {
     await new Promise(ok=>setTimeout(ok,150));
   }
   assert.equal(result.manifest.manifest_version,3);
-  assert.equal(result.manifest.version,"0.3.1");
+  assert.equal(result.manifest.version,"0.3.2");
   assert.ok(result.manifest.permissions.includes("sidePanel"));
   assert.equal(result.manifest.action.default_popup,undefined);
   assert.equal(result.path,"popup.html");
@@ -80,6 +80,61 @@ try {
   assert.equal(await page.locator("#bind-current-chatgpt").isVisible(),true);
   assert.ok((await page.locator("#chatgpt-status").textContent()).includes("Brak przypiętej"));
   console.log("REAL CHROMIUM ADAPTER UI PASS: separate ChatGPT bind control and no silent status change.");
+
+  const config = {
+    serverUrl: "http://127.0.0.1:58473", // No test server. STOP will be locally verified.
+    conversationId: "00000000-0000-4000-8000-000000000012",
+    participant: "jagoda",
+  };
+  const fakeToken = "isolated-cryptographic-test-token-".repeat(2);
+  const configured = await page.evaluate(async ({config, token}) =>
+    chrome.runtime.sendMessage({type:"CONFIGURE",config,token}),
+    {config,token:fakeToken});
+  assert.equal(configured?.ok,true,configured?.error);
+  assert.equal(configured.result.tokenReady,true);
+  const persisted = await page.evaluate(async () => {
+    const data=await chrome.storage.local.get(["jnb.token","jnb.config"]);
+    return {token:data["jnb.token"],config:data["jnb.config"]};
+  });
+  assert.equal(persisted.token,fakeToken);
+  assert.equal(persisted.config.conversationId,config.conversationId);
+
+  let confirmDialogCount = 0;
+  page.on("dialog", async dialog => {
+    confirmDialogCount += 1;
+    await dialog.dismiss();
+  });
+  await page.locator("#stop").click();
+  await page.waitForFunction(() => /NIEPOTWIERDZONY|nie potwierdził|Nie udało się potwierdzić/.test(document.querySelector("#notice")?.textContent || ""),
+    null,{timeout:12000});
+  assert.equal(confirmDialogCount,0,"STOP must not use modal confirm()");
+  const stopped=await page.evaluate(()=>chrome.runtime.sendMessage({type:"GET_STATUS"}));
+  assert.equal(stopped.result.active,false);
+  assert.equal(stopped.result.snapshot.remoteStopUnknown,true);
+  console.log("REAL CHROMIUM MODAL-FREE STOP PASS: local emergency stop, remote uncertainty stated.");
+
+  // Reopen the SAME real Chrome user profile. This is stronger than a tab
+  // refresh and simulates the entire browser restarting after an update.
+  // In some headless Chromium builds chrome.runtime.reload() permanently
+  // blocks the unpacked extension; a fresh process is the portable path.
+  await context.close();
+  context = await chromium.launchPersistentContext(temp, {
+    executablePath:binary,headless:true,
+    args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`,
+      "--no-first-run","--no-default-browser-check"],
+    viewport:{width:900,height:820}
+  });
+  const restartedWorker=context.serviceWorkers().find(x=>x.url().startsWith("chrome-extension://")) ??
+    await context.waitForEvent("serviceworker",{timeout:15000});
+  assert.equal(new URL(restartedWorker.url()).hostname,extensionId,"Extension ID changed on restart");
+  const restoredPage=await context.newPage();
+  await restoredPage.goto(`chrome-extension://${extensionId}/popup.html`);
+  const restored=await restoredPage.evaluate(()=>chrome.runtime.sendMessage({type:"GET_STATUS"}));
+  assert.equal(restored?.ok,true,"Extension did not recover after Chrome restart");
+  assert.equal(restored.result.tokenReady,true,"Token vanished after Chrome restart");
+  assert.equal(restored.result.active,false,"Restart must not restart the experiment");
+  assert.equal(restored.result.config.conversationId,config.conversationId);
+  console.log("REAL CHROMIUM TOKEN PERSISTENCE PASS: same credentials across full Chrome restart, START remains off.");
 } finally {
   if(context) await context.close();
   rmSync(temp,{recursive:true,force:true,maxRetries:5,retryDelay:120});

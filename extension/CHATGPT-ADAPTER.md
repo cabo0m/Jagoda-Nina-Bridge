@@ -1,4 +1,4 @@
-# Jagoda–Nina Bridge 0.3.1: adapter ChatGPT (Sprint 3)
+# Jagoda–Nina Bridge 0.3.2: adapter ChatGPT (Sprint 3)
 
 Przed użyciem uruchom serwer i wykonaj bootstrap jak w `server/README` albo głównym `README.md`.
 

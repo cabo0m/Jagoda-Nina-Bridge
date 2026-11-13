@@ -25,7 +25,7 @@
         </select>
         <label for="conversation-id">UUID rozmowy</label>
         <input id="conversation-id" type="text" autocomplete="off" spellcheck="false" required placeholder="00000000-0000-0000-0000-000000000000">
-        <label for="token">Token (tylko bieżąca sesja Chrome)</label>
+        <label for="token">Token (zapamiętywany lokalnie w tym profilu Chrome)</label>
         <input id="token" type="password" autocomplete="off" required placeholder="Token wygenerowany przez serwer">
         <button class="secondary" id="save" type="submit">Zapisz konfigurację i token</button>
       </form>
@@ -38,9 +38,9 @@
       <div class="controls">
         <button id="start" type="button">START</button>
         <button class="secondary" id="sync" type="button">Odśwież</button>
-        <button class="danger" id="stop" type="button">STOP</button>
+        <button class="danger" id="stop" type="button" title="Natychmiast zatrzymaj lokalnie i wyślij STOP na serwer; bez dodatkowego okna">STOP TERAZ</button>
       </div>
-      <p class="hint">START włącza synchronizację skrzynki co ok. 30 s. STOP zamyka rozmowę również na serwerze, nie tylko w tej przeglądarce.</p>
+      <p class="hint">START włącza synchronizację co ok. 30 s. STOP TERAZ działa bez okna potwierdzenia: od razu wyłącza lokalną synchronizację i próbuje zatrzymać rozmowę na serwerze. Sprawdź komunikat o potwierdzeniu.</p>
     </section>
     <section aria-labelledby="chatgpt-title">
       <h2 id="chatgpt-title">Adapter ChatGPT (Sprint 3)</h2>

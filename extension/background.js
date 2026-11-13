@@ -14,6 +14,8 @@ const EMPTY_SNAPSHOT = {
   lastSync: null, lastError: null, remoteStopUnknown: false,
 };
 let queue = Promise.resolve();
+let stopRequested = false;
+let stopEpoch = 0;
 
 function serialized(callback) {
   const next = queue.then(callback, callback);
@@ -29,14 +31,16 @@ async function tightenStorage() {
 }
 
 async function getConfig() {
-  const local = await chrome.storage.local.get([CONFIG_KEY, ACTIVE_KEY]);
+  const local = await chrome.storage.local.get([CONFIG_KEY, ACTIVE_KEY, TOKEN_KEY]);
   const session = await chrome.storage.session.get([
     TOKEN_KEY, SNAPSHOT_KEY, OUTGOING_KEY, LEASES_KEY, BINDING_KEY, JOB_KEY,
   ]);
   return {
     config: local[CONFIG_KEY] ?? null,
     active: local[ACTIVE_KEY] === true,
-    token: session[TOKEN_KEY] ?? null,
+    // A local, trusted-context-only token survives Chrome extension reloads.
+    // Session fallback supports migrating a running 0.3.1 profile.
+    token: local[TOKEN_KEY] ?? session[TOKEN_KEY] ?? null,
     snapshot: {...EMPTY_SNAPSHOT, ...(session[SNAPSHOT_KEY] ?? {})},
     outgoing: session[OUTGOING_KEY] ?? null,
     leases: session[LEASES_KEY] ?? {},
@@ -109,6 +113,7 @@ function requireSession(state) {
 }
 
 async function loadInbox() {
+  const currentStopEpoch = stopEpoch;
   const state = await getConfig();
   const {config, token} = requireSession(state);
   const id = encodeURIComponent(config.conversationId);
@@ -136,6 +141,10 @@ async function loadInbox() {
     // A successful inbox read is NOT proof that a previous remote STOP worked.
     remoteStopUnknown: state.snapshot.remoteStopUnknown,
   };
+  if (currentStopEpoch !== stopEpoch) {
+    // An emergency STOP happened during the HTTP reads. Preserve its state.
+    return (await getConfig()).snapshot;
+  }
   await saveSnapshot(snapshot);
   if (conversation.status !== "open") {
     await stopLocal();
@@ -144,6 +153,7 @@ async function loadInbox() {
 }
 
 async function poll() {
+  if (stopRequested) return;
   const state = await getConfig();
   if (!state.active) {
     return;
@@ -159,7 +169,7 @@ async function poll() {
   }
   try {
     const snapshot = await loadInbox();
-    await maybeAutoBridge(snapshot);
+    if (!stopRequested) await maybeAutoBridge(snapshot);
   } catch (error) {
     await saveSnapshot({...state.snapshot, lastError: error.message.slice(0, 300)});
     if (/HTTP (401|404):/.test(error.message)) {
@@ -199,17 +209,26 @@ async function configure(message) {
   const token = validateToken(message.token);
   await ensurePermission(config); // The popup must request consent in a user gesture.
   await stopLocal();
-  await chrome.storage.local.set({[CONFIG_KEY]: config});
+  await chrome.storage.local.set({[CONFIG_KEY]: config, [TOKEN_KEY]: token});
+  const unresolvedStop = previous.snapshot.remoteStopUnknown &&
+    previous.config?.conversationId === config.conversationId &&
+    previous.config?.serverUrl === config.serverUrl;
   await chrome.storage.session.set({
-    [TOKEN_KEY]: token,
-    [SNAPSHOT_KEY]: {...EMPTY_SNAPSHOT},
+    [SNAPSHOT_KEY]: {
+      ...EMPTY_SNAPSHOT,
+      remoteStopUnknown: Boolean(unresolvedStop),
+      lastError: unresolvedStop
+        ? "Poprzedni STOP zdalny niepotwierdzony. Kliknij STOP TERAZ ponownie z nowym tokenem."
+        : null,
+    },
     [LEASES_KEY]: {},
   });
-  await chrome.storage.session.remove([OUTGOING_KEY, BINDING_KEY, JOB_KEY]);
+  await chrome.storage.session.remove([TOKEN_KEY, OUTGOING_KEY, BINDING_KEY, JOB_KEY]);
   return await viewStatus();
 }
 
 async function start() {
+  const currentStopEpoch = stopEpoch;
   const state = await getConfig();
   const {config} = requireSession(state);
   if (state.snapshot.remoteStopUnknown) {
@@ -219,7 +238,15 @@ async function start() {
   if (snapshot.conversation.status !== "open") {
     throw new Error("Rozmowa jest zatrzymana. Nie można jej ponownie uruchomić.");
   }
+  if (stopEpoch !== currentStopEpoch) {
+    throw new Error("Operator wybrał STOP w trakcie uruchamiania.");
+  }
   await chrome.storage.local.set({[ACTIVE_KEY]: true});
+  if (stopEpoch !== currentStopEpoch) {
+    await stopLocal();
+    throw new Error("Operator wybrał STOP w trakcie uruchamiania.");
+  }
+  stopRequested = false;
   await chrome.alarms.create(ALARM_NAME, {periodInMinutes: POLL_MINUTES});
   await maybeAutoBridge(snapshot);
   return await viewStatus();
@@ -255,6 +282,7 @@ async function send(message) {
       [OUTGOING_KEY]: {conversationId: config.conversationId, payload},
     });
   }
+  if (stopRequested) throw new Error("Operator wybrał STOP. Wysyłka anulowana.");
   const result = await serverRequest(
     config, token, "POST",
     `/v1/conversations/${encodeURIComponent(config.conversationId)}/messages`,
@@ -302,6 +330,7 @@ async function ack(messageId) {
 }
 
 async function stop() {
+  stopRequested = true;
   const state = await getConfig();
   await stopLocal(); // STOP must work locally even without an internet connection.
   if (!state.config || !state.token) {
@@ -432,6 +461,7 @@ async function markBridgeFailure(job, message) {
 }
 
 async function maybeAutoBridge(snapshot) {
+  if (stopRequested) return;
   const state = await getConfig();
   if (!state.active || !state.binding || state.bridgeJob ||
       state.config?.participant !== "jagoda" ||
@@ -467,6 +497,7 @@ async function maybeAutoBridge(snapshot) {
       {lease_token: job.leaseToken});
     job.phase = "dispatched";
     await chrome.storage.session.set({[JOB_KEY]: job});
+    if (stopRequested) throw new Error("Operator wybrał STOP przed wysłaniem promptu.");
     const response = await chrome.tabs.sendMessage(binding.tabId, {
       type: "JNB_RUN", jobId: job.jobId, chatUrl: binding.chatUrl,
       prompt: formatBridgePrompt(incoming.content),
@@ -563,10 +594,17 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     respond({ok: false, error: "Odrzucono niezaufanego nadawcę."});
     return false;
   }
-  serialized(() => bridgeEvent
+  // STOP bypasses potentially blocked polling, ChatGPT and HTTP work.
+  // Signal is synchronous so newly queued tasks see it immediately.
+  const priorityStop = fromPopup && message?.type === "STOP";
+  if (priorityStop) {
+    stopRequested = true;
+    stopEpoch += 1;
+  }
+  (priorityStop ? stop() : serialized(() => bridgeEvent
     ? bridgeResult(message, sender)
     : handle(message)
-  ).then(
+  )).then(
     result => respond({ok: true, result}),
     error => respond({ok: false, error: String(error?.message ?? error).slice(0, 400)}),
   );

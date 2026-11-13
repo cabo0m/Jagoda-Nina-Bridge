@@ -37,4 +37,4 @@ Instalacja na domyślnym profilu Chrome używa źródeł z `C:\Users\micha\Docum
 
 - Globalny panel boczny ma pełną wysokość okna i regulowaną szerokość, lecz nie jest stroną zajmującą cały ekran; Chrome może go zamknąć na żądanie użytkownika lub przy zamknięciu okna.
 - Aktualizacja za pomocą `chrome://extensions` nie jest automatyczna dla katalogu rozpakowanego. Trzeba kliknąć Odśwież po zmianach kodu.
-- Tokeny pozostają w `chrome.storage.session`, nie w `chrome.storage.local`; brak trwałego zapisu tokenów jest świadomą właściwością bezpieczeństwa.
+- **Uwaga: powyższy stan dotyczy 0.3.1.** W wersji 0.3.2 token jest trwale zapisywany w `chrome.storage.local` ograniczonym do zaufanych kontekstów. To ułatwienie ergonomiczne kosztem przechowywania tokenu na dysku profilu Chrome. Szczegóły w `STOP-TOKEN-0.3.2.md`.
