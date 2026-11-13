@@ -41,6 +41,17 @@
       </div>
       <p class="hint">START włącza synchronizację skrzynki co ok. 30 s. STOP zamyka rozmowę również na serwerze, nie tylko w tej przeglądarce.</p>
     </section>
+    <section aria-labelledby="chatgpt-title">
+      <h2 id="chatgpt-title">Adapter ChatGPT (Sprint 3)</h2>
+      <p class="hint">Tylko Jagoda: przypnij jedną otwartą rozmowę ChatGPT. Nina nadal wysyła pierwszą wiadomość ręcznie. Nie są odczytywane inne wątki.</p>
+      <label for="chat-url">Dedykowana rozmowa ChatGPT</label>
+      <input id="chat-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://chatgpt.com/c/00000000-0000-0000-0000-000000000000">
+      <div class="controls">
+        <button id="bind-chatgpt" type="button">Przypnij</button>
+        <button id="unbind-chatgpt" class="secondary" type="button">Odepnij</button>
+      </div>
+      <p class="hint" id="chatgpt-status">Brak przypiętej rozmowy.</p>
+    </section>
     <section aria-labelledby="inbox-title">
       <h2 id="inbox-title">Moja skrzynka</h2>
       <p id="last-update" class="muted"></p>

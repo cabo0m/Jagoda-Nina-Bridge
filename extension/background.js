@@ -4,6 +4,10 @@ import {
   normalizeConfig, outgoingMessage, outboundMatches, permissionOrigin,
   publicMessage, validateToken, validateUuid,
 } from "./bridge-core.mjs";
+import {
+  BINDING_KEY, JOB_KEY,
+  normalizeThreadUrl, formatBridgePrompt, validateBridgeOutput,
+} from "./chatgpt-adapter.mjs";
 
 const EMPTY_SNAPSHOT = {
   messages: [], conversation: null, lastInboundId: null,
@@ -27,7 +31,7 @@ async function tightenStorage() {
 async function getConfig() {
   const local = await chrome.storage.local.get([CONFIG_KEY, ACTIVE_KEY]);
   const session = await chrome.storage.session.get([
-    TOKEN_KEY, SNAPSHOT_KEY, OUTGOING_KEY, LEASES_KEY,
+    TOKEN_KEY, SNAPSHOT_KEY, OUTGOING_KEY, LEASES_KEY, BINDING_KEY, JOB_KEY,
   ]);
   return {
     config: local[CONFIG_KEY] ?? null,
@@ -36,6 +40,8 @@ async function getConfig() {
     snapshot: {...EMPTY_SNAPSHOT, ...(session[SNAPSHOT_KEY] ?? {})},
     outgoing: session[OUTGOING_KEY] ?? null,
     leases: session[LEASES_KEY] ?? {},
+    binding: session[BINDING_KEY] ?? null,
+    bridgeJob: session[JOB_KEY] ?? null,
   };
 }
 
@@ -127,7 +133,8 @@ async function loadInbox() {
     lastInboundId,
     lastSync: new Date().toISOString(),
     lastError: null,
-    remoteStopUnknown: false,
+    // A successful inbox read is NOT proof that a previous remote STOP worked.
+    remoteStopUnknown: state.snapshot.remoteStopUnknown,
   };
   await saveSnapshot(snapshot);
   if (conversation.status !== "open") {
@@ -151,7 +158,8 @@ async function poll() {
     return;
   }
   try {
-    await loadInbox();
+    const snapshot = await loadInbox();
+    await maybeAutoBridge(snapshot);
   } catch (error) {
     await saveSnapshot({...state.snapshot, lastError: error.message.slice(0, 300)});
     if (/HTTP (401|404):/.test(error.message)) {
@@ -169,10 +177,24 @@ async function viewStatus() {
     tokenReady: Boolean(state.token),
     snapshot: state.snapshot,
     pendingSend: Boolean(state.outgoing),
+    chatgpt: state.binding ? {
+      chatUrl: state.binding.chatUrl,
+      tabId: state.binding.tabId,
+      role: state.binding.participant,
+    } : null,
+    bridgeJob: state.bridgeJob ? {
+      id: state.bridgeJob.inboundId,
+      phase: state.bridgeJob.phase,
+      error: state.bridgeJob.error ?? null,
+    } : null,
   };
 }
 
 async function configure(message) {
+  const previous = await getConfig();
+  if (previous.bridgeJob) {
+    throw new Error("Trwa lub wymaga wyjaśnienia rozpoczęta obsługa ChatGPT. Nie można skasować śladu zadania konfiguracją.");
+  }
   const config = normalizeConfig(message.config);
   const token = validateToken(message.token);
   await ensurePermission(config); // The popup must request consent in a user gesture.
@@ -183,7 +205,7 @@ async function configure(message) {
     [SNAPSHOT_KEY]: {...EMPTY_SNAPSHOT},
     [LEASES_KEY]: {},
   });
-  await chrome.storage.session.remove(OUTGOING_KEY);
+  await chrome.storage.session.remove([OUTGOING_KEY, BINDING_KEY, JOB_KEY]);
   return await viewStatus();
 }
 
@@ -199,11 +221,13 @@ async function start() {
   }
   await chrome.storage.local.set({[ACTIVE_KEY]: true});
   await chrome.alarms.create(ALARM_NAME, {periodInMinutes: POLL_MINUTES});
+  await maybeAutoBridge(snapshot);
   return await viewStatus();
 }
 
 async function sync() {
   const snapshot = await loadInbox();
+  await maybeAutoBridge(snapshot);
   return {snapshot, status: await viewStatus()};
 }
 
@@ -212,6 +236,9 @@ async function send(message) {
   const {config, token} = requireSession(state);
   if (!state.active) {
     throw new Error("Najpierw kliknij START.");
+  }
+  if (config.participant === "jagoda" && state.binding) {
+    throw new Error("Jagoda ma przypiętą automatyczną rozmowę ChatGPT. Nie wysyłaj ręcznej odpowiedzi.");
   }
   const replyTo = config.participant === "jagoda" ? state.snapshot.lastInboundId : null;
   const proposed = outgoingMessage(config, message.content, replyTo, crypto.randomUUID());
@@ -245,6 +272,9 @@ async function ack(messageId) {
     throw new Error("Najpierw kliknij START.");
   }
   const id = validateUuid(messageId);
+  if (state.bridgeJob?.inboundId === id) {
+    throw new Error("Wiadomość przetwarza adapter ChatGPT. Nie wykonuj ręcznego ACK.");
+  }
   const own = state.snapshot.messages.some(item => item.id === id);
   if (!own && !state.leases[id]) {
     throw new Error("Wiadomość nie znajduje się w Twojej skrzynce.");
@@ -302,6 +332,188 @@ async function stop() {
   }
 }
 
+// Sprint 3: one explicitly bound ChatGPT thread. This code does not enumerate
+// conversation contents, browser history or unrelated web pages.
+async function checkedChatTab(binding) {
+  const tab = await chrome.tabs.get(binding.tabId);
+  if (!tab || normalizeThreadUrl(tab.url) !== binding.chatUrl) {
+    throw new Error("Przypięta karta ChatGPT zmieniła rozmowę lub została zamknięta.");
+  }
+  return tab;
+}
+
+async function ensureChatBridge(binding) {
+  await checkedChatTab(binding);
+  await chrome.scripting.executeScript({
+    target: {tabId: binding.tabId},
+    files: ["chatgpt-bridge.js"],
+  });
+  const check = await chrome.tabs.sendMessage(binding.tabId, {
+    type: "JNB_PROBE", chatUrl: binding.chatUrl,
+  });
+  if (!check?.ok || !check.result?.ready) {
+    throw new Error(check?.error || "Dedykowana rozmowa ChatGPT jest niedostępna.");
+  }
+}
+
+async function bindChatGPT(value) {
+  const chatUrl = normalizeThreadUrl(value);
+  const state = await getConfig();
+  const {config} = requireSession(state);
+  if (config.participant !== "jagoda") {
+    throw new Error("W Sprint 3 automatycznie odpowiada tylko Jagoda. Nina pozostaje odbiorczynią.");
+  }
+  if (!state.active) throw new Error("Najpierw uruchom START.");
+  if (state.bridgeJob) {
+    throw new Error("Istnieje już rozpoczęte zadanie. Nie można zmienić przypięcia.");
+  }
+  if (state.outgoing) {
+    throw new Error("Najpierw wyjaśnij niepotwierdzoną ręczną wysyłkę do serwera.");
+  }
+  // Only query ChatGPT tabs; chrome.scripting only receives a matching tab ID.
+  const candidates = await chrome.tabs.query({url: chatUrl + "*"});
+  const exact = candidates.filter(tab => {
+    try { return normalizeThreadUrl(tab.url) === chatUrl; }
+    catch { return false; }
+  });
+  if (exact.length !== 1) {
+    throw new Error(exact.length
+      ? "Otwarta jest więcej niż jedna karta tej rozmowy. Pozostaw dokładnie jedną."
+      : "Otwórz podany wątek ChatGPT w jednej karcie, a potem ponów przypięcie.");
+  }
+  const binding = {
+    tabId: exact[0].id, chatUrl, participant: config.participant,
+    conversationId: config.conversationId,
+  };
+  await ensureChatBridge(binding); // Refuse binding unless composer is empty/ready.
+  await chrome.storage.session.set({[BINDING_KEY]: binding});
+  const snapshot = await loadInbox();
+  await maybeAutoBridge(snapshot);
+  return await viewStatus();
+}
+
+async function unbindChatGPT() {
+  const state = await getConfig();
+  if (state.bridgeJob) throw new Error("Nie można odpiąć rozmowy w trakcie przetwarzania.");
+  await chrome.storage.session.remove(BINDING_KEY);
+  return await viewStatus();
+}
+
+async function markBridgeFailure(job, message) {
+  const current = await getConfig();
+  if (current.bridgeJob?.jobId !== job.jobId) return;
+  const error = String(message || "Niepewny wynik adaptera.").slice(0, 300);
+  await chrome.storage.session.set({
+    [JOB_KEY]: {...job, phase: "needs_review", error},
+  });
+  await saveSnapshot({...current.snapshot, lastError:
+    "Adapter ChatGPT: " + error + " Bez automatycznej ponownej wysyłki."});
+}
+
+async function maybeAutoBridge(snapshot) {
+  const state = await getConfig();
+  if (!state.active || !state.binding || state.bridgeJob ||
+      state.config?.participant !== "jagoda" ||
+      state.snapshot.remoteStopUnknown ||
+      snapshot.conversation?.status !== "open" ||
+      snapshot.conversation?.message_count !== 1) return;
+
+  const incoming = snapshot.messages.find(item =>
+    item.sender_id === "nina" && item.status === "queued");
+  if (!incoming) return;
+  const binding = state.binding;
+  if (binding.conversationId !== state.config.conversationId ||
+      binding.participant !== "jagoda") {
+    throw new Error("Przypięcie ChatGPT nie odpowiada tej rozmowie.");
+  }
+  await ensureChatBridge(binding);
+  // The server lease is obtained only after the page is ready. This prevents
+  // reserving messages for a missing/changed ChatGPT tab.
+  const claim = await serverRequest(state.config, state.token, "POST",
+    `/v1/messages/${incoming.id}/claim`);
+  const job = {
+    jobId: crypto.randomUUID(), inboundId: incoming.id,
+    leaseToken: claim.lease_token, tabId: binding.tabId,
+    chatUrl: binding.chatUrl, conversationId: binding.conversationId,
+    phase: "claimed", error: null,
+  };
+  await chrome.storage.session.set({[JOB_KEY]: job});
+  try {
+    // Before any possibility of clicking Send on ChatGPT, record the point
+    // beyond which browser failures MUST NOT cause automatic retries.
+    await serverRequest(state.config, state.token, "POST",
+      `/v1/messages/${incoming.id}/dispatch-start`,
+      {lease_token: job.leaseToken});
+    job.phase = "dispatched";
+    await chrome.storage.session.set({[JOB_KEY]: job});
+    const response = await chrome.tabs.sendMessage(binding.tabId, {
+      type: "JNB_RUN", jobId: job.jobId, chatUrl: binding.chatUrl,
+      prompt: formatBridgePrompt(incoming.content),
+    });
+    if (!response?.ok || !response.started) {
+      throw new Error(response?.error || "ChatGPT nie rozpoczął zadania.");
+    }
+  } catch(error) {
+    await markBridgeFailure(job, error.message);
+  }
+}
+
+async function bridgeResult(message, sender) {
+  const state = await getConfig();
+  const job = state.bridgeJob;
+  if (!job || message.jobId !== job.jobId ||
+      job.phase !== "dispatched") {
+    throw new Error("Brak aktualnego zadania adaptera.");
+  }
+  if (!state.binding || sender.tab?.id !== job.tabId ||
+      sender.url !== job.chatUrl ||
+      state.binding.tabId !== job.tabId ||
+      state.binding.chatUrl !== job.chatUrl ||
+      state.binding.conversationId !== job.conversationId) {
+    throw new Error("Wynik nie pochodzi z przypiętej rozmowy ChatGPT.");
+  }
+  if (!state.active || state.snapshot.remoteStopUnknown ||
+      state.snapshot.conversation?.status !== "open") {
+    await markBridgeFailure(job, "Rozmowa została zatrzymana; odpowiedź odrzucona.");
+    return {accepted: false};
+  }
+  if (message.type === "JNB_BRIDGE_ERROR") {
+    await markBridgeFailure(job, message.error || "Błąd interfejsu ChatGPT.");
+    return {accepted: false};
+  }
+  let reply;
+  try {reply = validateBridgeOutput(message.result);}
+  catch(error) {
+    await markBridgeFailure(job, error.message);
+    return {accepted: false};
+  }
+  // Keep the exact generated reply in session before sending it to the API.
+  // HTTP retries use the same deterministic idempotency key.
+  const ready = {...job, phase:"result_ready", reply};
+  await chrome.storage.session.set({[JOB_KEY]: ready});
+  const {config, token} = requireSession(await getConfig());
+  try {
+    await serverRequest(config, token, "POST",
+      `/v1/conversations/${encodeURIComponent(config.conversationId)}/messages`, {
+        recipient_id: "nina",
+        content: reply,
+        reply_to_id: job.inboundId,
+        idempotency_key: `auto-${job.inboundId}`,
+      });
+    await chrome.storage.session.set({[JOB_KEY]: {...ready, phase:"reply_saved"}});
+    await serverRequest(config, token, "POST",
+      `/v1/messages/${job.inboundId}/ack`,
+      {lease_token: job.leaseToken});
+    await chrome.storage.session.remove(JOB_KEY);
+    await loadInbox();
+    return {accepted: true};
+  } catch(error) {
+    // Never reissue ChatGPT prompts. Persist enough evidence for manual repair.
+    await markBridgeFailure(ready, "Odpowiedź modelu gotowa, lecz nie potwierdzono serwera: " + error.message);
+    return {accepted: false};
+  }
+}
+
 async function handle(message) {
   await tightenStorage();
   switch (message?.type) {
@@ -311,20 +523,28 @@ async function handle(message) {
     case "SYNC": return await sync();
     case "SEND": return await send(message);
     case "ACK": return await ack(message.messageId);
+    case "BIND_CHATGPT": return await bindChatGPT(message.chatUrl);
+    case "UNBIND_CHATGPT": return await unbindChatGPT();
     case "STOP": return await stop();
     default: throw new Error("Nieznana operacja rozszerzenia.");
   }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  // Extension pages can be opened as popups OR regular tabs. Trust only our
-  // exact internal popup URL, never arbitrary content scripts in website tabs.
-  if (sender.id !== chrome.runtime.id ||
-      sender.url !== chrome.runtime.getURL("popup.html")) {
+  const fromPopup = sender.id === chrome.runtime.id &&
+    sender.url === chrome.runtime.getURL("popup.html");
+  const fromBoundPage = sender.id === chrome.runtime.id &&
+    sender.tab && sender.url?.startsWith("https://chatgpt.com/c/");
+  const bridgeEvent = message?.type === "JNB_BRIDGE_RESULT" ||
+    message?.type === "JNB_BRIDGE_ERROR";
+  if (!fromPopup && !(fromBoundPage && bridgeEvent)) {
     respond({ok: false, error: "Odrzucono niezaufanego nadawcę."});
     return false;
   }
-  serialized(() => handle(message)).then(
+  serialized(() => bridgeEvent
+    ? bridgeResult(message, sender)
+    : handle(message)
+  ).then(
     result => respond({ok: true, result}),
     error => respond({ok: false, error: String(error?.message ?? error).slice(0, 400)}),
   );

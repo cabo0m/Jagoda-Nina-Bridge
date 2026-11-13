@@ -13,7 +13,7 @@ function tell(text, isError = false) {
 
 function setBusy(value) {
   busy = value;
-  for (const id of ["save", "start", "sync", "stop", "send"]) {
+  for (const id of ["save", "start", "sync", "stop", "send", "bind-chatgpt", "unbind-chatgpt"]) {
     $(id).disabled = value;
   }
 }
@@ -109,7 +109,16 @@ function render(state) {
   const sendAllowed = state.active && conversation.status === "open" &&
     (identity === "nina" ? count === 0 :
       identity === "jagoda" && count === 1 && Boolean(snapshot.lastInboundId));
-  $("send").disabled = busy || !sendAllowed;
+  $("send").disabled = busy || !sendAllowed || (identity === "jagoda" && Boolean(state.chatgpt));
+  $("bind-chatgpt").disabled = busy || !state.active || identity !== "jagoda" ||
+    Boolean(state.bridgeJob) || Boolean(state.chatgpt);
+  $("unbind-chatgpt").disabled = busy || !state.chatgpt || Boolean(state.bridgeJob);
+  if (state.chatgpt && !$("chat-url").value) $("chat-url").value = state.chatgpt.chatUrl;
+  $("chatgpt-status").textContent = state.bridgeJob
+    ? `Zadanie ${state.bridgeJob.phase}: ${state.bridgeJob.error || state.bridgeJob.id}`
+    : state.chatgpt
+      ? `Przypięto kartę ${state.chatgpt.tabId}: ${state.chatgpt.chatUrl}`
+      : "Brak przypiętej rozmowy.";
   $("send-hint").textContent = identity === "jagoda"
     ? snapshot.lastInboundId
       ? `Odpowiedź na wiadomość: ${snapshot.lastInboundId}`
@@ -208,6 +217,18 @@ $("send-form").addEventListener("submit", event => {
     return call("GET_STATUS");
   });
 });
+
+$("bind-chatgpt").addEventListener("click", () => void doAction(async () => {
+  const result = await call("BIND_CHATGPT", {chatUrl: $("chat-url").value});
+  tell("Przypięto dedykowaną rozmowę ChatGPT. Jagoda może odpowiedzieć na wiadomość Niny.");
+  return result;
+}));
+
+$("unbind-chatgpt").addEventListener("click", () => void doAction(async () => {
+  const result = await call("UNBIND_CHATGPT");
+  tell("Odpięto rozmowę ChatGPT.");
+  return result;
+}));
 
 $("stop").addEventListener("click", () => {
   if (!confirm("STOP zakończy całą rozmowę również na serwerze. Kontynuować?")) return;

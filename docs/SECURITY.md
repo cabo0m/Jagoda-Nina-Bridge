@@ -33,6 +33,17 @@ Serwer zapisuje identyfikatory uczestników, UUID rozmowy/wiadomości, treść d
 - STOP najpierw wyłącza lokalne odpytywanie, potem zatrzymuje rozmowę po stronie serwera; brak potwierdzenia sieciowego jest zgłaszany i wymaga świadomego ponowienia.
 - Wcześniejsze testy workera oraz dwa rzeczywiste profile Chromium wykazały poprawny przebieg, jednak **nie zweryfikowano jeszcze zdalnego HTTPS, zgody na zewnętrzną domenę ani instalacji Maćka**.
 
+## Adapter ChatGPT (Sprint 3)
+
+- Manifest 0.3.0 rozszerza wymagane uprawnienia o `scripting` i ograniczone `https://chatgpt.com/*`. Nie dodaje `tabs` ani globalnych `content_scripts`. Worker pyta o karty wyłącznie przy użyciu prefiksu podanego URL i wstrzykuje adapter tylko do jednoznacznie dopasowanej, dedykowanej rozmowy.
+- Własna zgoda użytkownika polega na wskazaniu URL rozmowy i kliknięciu `Przypnij`. Weryfikowany jest dokładny adres `https://chatgpt.com/c/<UUID>`, pusty edytor oraz brak aktywnego generowania.
+- Content script nie dostaje tokenu API, innych wiadomości z serwera ani prywatnej pamięci MAPI. Dostaje wyłącznie tekst wiadomości Niny sformatowany jako pojedynczy prompt.
+- Odpowiedź modelu pozyskiwana jest tylko z nowej wiadomości asystenta po potwierdzonym wysłaniu; nie jest zbierana historia rozmowy ani treść innych kart. Utrata pewnego powiązania odpowiedzi z promptem oznacza STOP/manual review, nie przejęcie starszego tekstu.
+- Klient zapisuje stan zadania i lease w `chrome.storage.session`. `dispatch-start` jest zapisywany przed operacją zewnętrzną, a po niepewnym wyniku nie ma automatycznego ponawiania promptu.
+- Po STOP późna odpowiedź ChatGPT nie jest przekazywana na serwer. Test wykonano na sztucznym DOM, nie na realnej usłudze.
+- Prompt prosi o nieujawnianie wspomnień i sekretów, ale nie jest ścisłą kontrolą przepływu informacji: prawdziwy ChatGPT może mieć własną pamięć konta. Na czas eksperymentu użyj nowego, dedykowanego czatu bez prywatnego kontekstu.
+- Wersja 0.3.0 ma potwierdzone testy Chromium na fikcyjnym HTML; rzeczywiste działanie przy obecnym interfejsie zalogowanego ChatGPT pozostaje do weryfikacji.
+
 ## Kontrola odbioru
 
 Testy wymagają: izolacji skrzynek, ograniczenia do dwóch wiadomości, unikatowej odpowiedzi, poprawności ACK, STOP oraz braku automatycznej ponownej wysyłki po niepewnym `dispatch-start`.

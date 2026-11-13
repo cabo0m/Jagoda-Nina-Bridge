@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>TEST ChatGPT DOM Fixture</title>
+<style>
+body { font: 15px sans-serif; padding: 20px; }
+#prompt-textarea {border: 1px solid #888; min-height: 45px; width: 600px;}
+[data-message-author-role] {padding: 8px; width: 600px;}
+button { margin-top: 10px; padding: 9px;}
+.markdown { white-space: pre-wrap;}
+</style></head><body>
+<h1>FICTIONAL FIXTURE, NOT ChatGPT</h1>
+<div data-message-author-role="assistant"><div class="markdown">OLD ASSISTANT MESSAGE (must NOT be used)</div></div>
+<div id="prompt-textarea" class="ProseMirror" role="textbox" contenteditable="true"></div>
+<button data-testid="send-button" type="button">Wyślij</button>
+<script>
+const input = document.querySelector("#prompt-textarea");
+document.querySelector('[data-testid="send-button"]').addEventListener("click", () => {
+  const prompt = input.innerText || input.textContent || "";
+  if (!prompt.includes("[POCZĄTEK WIADOMOŚCI NINY]")) return;
+  const user = document.createElement("div");
+  user.setAttribute("data-message-author-role", "user");
+  const bubble = document.createElement("div");
+  bubble.className = "whitespace-pre-wrap";
+  bubble.textContent = prompt;
+  user.append(bubble);
+  document.body.append(user);
+  input.textContent = "";
+  const stop = document.createElement("button");
+  stop.dataset.testid = "stop-button";
+  stop.textContent = "Stop";
+  document.body.append(stop);
+  const response = document.createElement("div");
+  response.setAttribute("data-message-author-role", "assistant");
+  const body = document.createElement("div");
+  body.className = "markdown";
+  body.textContent = "Wiadomość w trakcie pisania...";
+  response.append(body);
+  document.body.append(response);
+  setTimeout(() => {
+    body.textContent = "Cześć Nino! Tu Jagoda. Odpowiadam wyłącznie na przekazaną wiadomość.";
+    stop.remove();
+  }, 500);
+});
+</script></body></html>

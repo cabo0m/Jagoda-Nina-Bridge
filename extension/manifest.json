@@ -1,16 +1,18 @@
 {
   "manifest_version": 3,
   "name": "Jagoda–Nina Bridge (eksperyment)",
-  "version": "0.2.0",
-  "description": "Ręczny transport dwóch wiadomości między Jagodą i Niną przez serwer. Bez dostępu do rozmów ChatGPT.",
+  "version": "0.3.0",
+  "description": "Eksperymentalny transport Nina–Jagoda oraz adapter jednej dedykowanej rozmowy ChatGPT. Bez dostępu do innych rozmów.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
-    "alarms"
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
     "http://127.0.0.1/*",
-    "http://localhost/*"
+    "http://localhost/*",
+    "https://chatgpt.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*"

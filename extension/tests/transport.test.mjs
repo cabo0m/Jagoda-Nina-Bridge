@@ -9,12 +9,13 @@ import {setTimeout as sleep} from "node:timers/promises";
 import vm from "node:vm";
 import {webcrypto} from "node:crypto";
 import * as core from "../bridge-core.mjs";
+import * as adapter from "../chatgpt-adapter.mjs";
 
 const extension = resolve(dirname(new URL(import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/, "")), "..");
 const server = resolve(extension, "..", "server");
 const python = join(server, ".venv", "Scripts", "python.exe");
 const source = readFileSync(join(extension, "background.js"), "utf8")
-  .replace(/^import\s*\{[\s\S]*?\}\s*from\s*["']\.\/bridge-core\.mjs["'];?\s*/m, "");
+  .replace(/^import\s*\{[\s\S]*?\}\s*from\s*["']\.\/(bridge-core|chatgpt-adapter)\.mjs["'];?\s*/gm, "");
 assert.ok(!source.includes('from "./bridge-core.mjs"'), "Test must execute actual worker source");
 
 function area() {
@@ -61,7 +62,7 @@ function createWorker(fetchOverride = fetch) {
     },
   };
   const context = vm.createContext({
-    ...core, chrome, crypto: webcrypto, fetch: fetchOverride,
+    ...core, ...adapter, chrome, crypto: webcrypto, fetch: fetchOverride,
     URL, AbortController, setTimeout, clearTimeout, console,
   });
   new vm.Script(source, {filename: join(extension, "background.js")}).runInContext(context);
@@ -180,13 +181,15 @@ test("normalization, strict scope and minimum manifest permissions", () => {
   assert.throws(() => core.validateUuid("not-an-uuid"));
   assert.throws(() => core.validateToken("test"));
   const manifest = JSON.parse(readFileSync(join(extension, "manifest.json"), "utf8"));
-  assert.deepEqual(manifest.permissions, ["storage", "alarms"]);
+  assert.deepEqual(manifest.permissions, ["storage", "alarms", "scripting"]);
   assert.equal(manifest.manifest_version, 3);
   assert.ok(!("content_scripts" in manifest));
-  assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1/*", "http://localhost/*"]);
+  assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1/*", "http://localhost/*", "https://chatgpt.com/*"]);
   assert.deepEqual(manifest.optional_host_permissions, ["https://*/*"]);
   assert.ok(!manifest.permissions.includes("tabs"));
-  assert.ok(!manifest.permissions.includes("scripting"));
+  assert.ok(manifest.permissions.includes("scripting"));
+  assert.ok(!manifest.permissions.includes("tabs"));
+  assert.ok(!("content_scripts" in manifest));
 });
 
 test("two isolated extension workers exchange two messages over REAL HTTP and STOP", async () => {
@@ -302,4 +305,27 @@ test("forbidden origin and session token expiry block all actions", async () => 
   const state = await worker.good({type: "GET_STATUS"});
   assert.equal(state.tokenReady, false);
   await worker.bad({type: "START"}, /token/i);
+});
+
+test("ChatGPT thread binding requires exact dedicated UUID and no other paths", () => {
+  const id = "f00df00d-1111-4222-8333-aabbccddee11";
+  assert.equal(adapter.normalizeThreadUrl("https://chatgpt.com/c/" + id), "https://chatgpt.com/c/" + id);
+  for (const invalid of [
+    "https://chatgpt.com/", "https://chatgpt.com/c",
+    "https://chatgpt.com/c/" + id + "?model=gpt",
+    "https://www.chatgpt.com/c/" + id,
+    "https://chatgpt.com/g/gpt-example/c/" + id,
+    "http://chatgpt.com/c/" + id,
+    "https://chatgpt.com/c/" + id + "/other",
+    "https://attacker.example/c/" + id,
+  ]) {
+    assert.throws(() => adapter.normalizeThreadUrl(invalid));
+  }
+  const prompt=adapter.formatBridgePrompt("Cześć Jagodo, tu Nina.");
+  assert.ok(prompt.includes("[POCZĄTEK WIADOMOŚCI NINY]"));
+  assert.ok(prompt.includes("Cześć Jagodo, tu Nina."));
+  assert.ok(prompt.includes("NIE ujawniaj prywatnej pamięci"));
+  assert.equal(adapter.validateBridgeOutput("  Cześć Nino  "), "Cześć Nino");
+  assert.throws(() => adapter.validateBridgeOutput(" ".repeat(5)));
+  assert.throws(() => adapter.validateBridgeOutput("x".repeat(4001)));
 });
