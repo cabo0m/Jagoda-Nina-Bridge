@@ -33,6 +33,10 @@ Serwer zapisuje identyfikatory uczestników, UUID rozmowy/wiadomości, treść d
 - STOP najpierw wyłącza lokalne odpytywanie, potem zatrzymuje rozmowę po stronie serwera; brak potwierdzenia sieciowego jest zgłaszany i wymaga świadomego ponowienia.
 - Wcześniejsze testy workera oraz dwa rzeczywiste profile Chromium wykazały poprawny przebieg, jednak **nie zweryfikowano jeszcze zdalnego HTTPS, zgody na zewnętrzną domenę ani instalacji Maćka**.
 
+## Jednorazowe odzyskanie tokenu (0.3.3)
+
+Pomocnik `tools/local_bootstrap.py` działa wyłącznie na `127.0.0.1:8766` i obsługuje tylko jedno poprawne żądanie z dokładnym `Origin` identyfikującym rozszerzenie hosta. Token Jagody z pliku `.env` nie trafia do interfejsu, adresów URL, plików JS ani logów. Uwaga: nagłówek HTTP Origin nie jest silnym dowodem dla lokalnego złośliwego procesu; taki proces może też czytać `.env`. Funkcji nie należy uruchamiać na serwerze publicznym ani maszynie współdzielonej bez izolacji. Wymaga jawnego kliknięcia przycisku w rozszerzeniu i nie uruchamia rozmowy. Szczegóły: `LOCAL-TOKEN-RECOVERY-0.3.3.md`.
+
 ## Utrwalanie tokenu uczestniczki (0.3.2)
 
 Token po zatwierdzeniu konfiguracji przechowywany jest w osobnym kluczu `chrome.storage.local` ograniczonym do `TRUSTED_CONTEXTS`, aby nie ginął po aktualizacji rozszerzenia. **Nie jest dodatkowo szyfrowany w profilu Chrome**. Profil przeglądarki należy chronić na poziomie systemu operacyjnego; skrypty stron nie mają dostępu do klucza poprzez API storage. Token przechowywany wcześniej wyłącznie w `chrome.storage.session`, który już wygasł, wymaga jednorazowego ponownego wpisania. START po restarcie nie włącza się automatycznie. STOP nie używa `confirm()` i może zadziałać lokalnie nawet bez tokenu; zdalny sukces jest wyświetlany wyłącznie po potwierdzeniu HTTP. Szczegóły: `STOP-TOKEN-0.3.2.md`.

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Jagoda–Nina Bridge (eksperyment)",
-  "version": "0.3.2",
-  "description": "Jagoda–Nina Bridge: trwały panel boczny, lokalnie zapamiętany token i priorytetowy STOP.",
+  "version": "0.3.3",
+  "description": "Jagoda–Nina Bridge: stały panel, awaryjny STOP i jednorazowe lokalne odzyskiwanie tokenu.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",

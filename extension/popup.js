@@ -15,7 +15,7 @@ function tell(text, isError = false) {
 function setBusy(value) {
   busy = value;
   // Emergency STOP must never be disabled by a concurrent operation.
-  for (const id of ["save", "start", "sync", "send", "bind-chatgpt", "bind-current-chatgpt", "unbind-chatgpt"]) {
+  for (const id of ["save", "recover-local", "start", "sync", "send", "bind-chatgpt", "bind-current-chatgpt", "unbind-chatgpt"]) {
     $(id).disabled = value;
   }
 }
@@ -91,6 +91,8 @@ function render(state) {
   $("start").disabled = busy || !state.tokenReady || state.active ||
     conversation.status === "stopped" || Boolean(snapshot.remoteStopUnknown);
   $("sync").disabled = busy || !state.tokenReady;
+  $("recover-local").disabled = busy || !state.config || state.tokenReady ||
+    state.config.participant !== "jagoda" || state.config.serverUrl !== "http://127.0.0.1:8765";
   $("stop").disabled = stopping || (
     conversation.status === "stopped" && !snapshot.remoteStopUnknown
   );
@@ -237,6 +239,12 @@ $("bind-chatgpt").addEventListener("click", () => void doAction(async () => {
 $("unbind-chatgpt").addEventListener("click", () => void doAction(async () => {
   const result = await call("UNBIND_CHATGPT");
   tell("Odpięto rozmowę ChatGPT.");
+  return result;
+}));
+
+$("recover-local").addEventListener("click", () => void doAction(async () => {
+  const result = await call("RECOVER_LOCAL_TOKEN");
+  tell("Token Jagody przywrócony z hosta. START nie został uruchomiony.");
   return result;
 }));
 

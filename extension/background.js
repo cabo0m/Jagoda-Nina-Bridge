@@ -227,6 +227,56 @@ async function configure(message) {
   return await viewStatus();
 }
 
+async function recoverLocalToken() {
+  const state = await getConfig();
+  const config = state.config && normalizeConfig(state.config);
+  if (!config || config.participant !== "jagoda" ||
+      config.serverUrl !== "http://127.0.0.1:8765") {
+    throw new Error("Lokalne odzyskanie działa tylko dla skonfigurowanej Jagody na tym hoście.");
+  }
+  if (state.active) {
+    throw new Error("Zatrzymaj synchronizację przed odzyskaniem tokenu.");
+  }
+  if (state.token) {
+    // Migrate still-live 0.3.1 session data without contacting the helper.
+    await chrome.storage.local.set({[TOKEN_KEY]: validateToken(state.token)});
+    await chrome.storage.session.remove(TOKEN_KEY);
+    return await viewStatus();
+  }
+
+  // One-shot helper runs only on 127.0.0.1, validates this exact extension
+  // origin, and never exposes either participant's password or ChatGPT login.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  let result;
+  try {
+    const response = await fetch("http://127.0.0.1:8766/bootstrap", {
+      method: "POST",
+      headers: {"X-JNB-Local-Setup": "1"},
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error("Lokalny pomocnik odmówił dostępu (HTTP " + response.status + ").");
+    }
+    result = await response.json();
+  } catch(error) {
+    throw new Error("Nie udało się przywrócić tokenu z hosta: " +
+      String(error?.message || error).slice(0, 120));
+  } finally {
+    clearTimeout(timer);
+  }
+  if (result?.serverUrl !== config.serverUrl ||
+      result?.participant !== config.participant ||
+      result?.conversationId !== config.conversationId) {
+    throw new Error("Lokalna konfiguracja nie odpowiada ustawieniom rozszerzenia. Niczego nie zapisano.");
+  }
+  await chrome.storage.local.set({[TOKEN_KEY]: validateToken(result.token)});
+  return await viewStatus();
+}
+
 async function start() {
   const currentStopEpoch = stopEpoch;
   const state = await getConfig();
@@ -571,6 +621,7 @@ async function handle(message) {
   switch (message?.type) {
     case "GET_STATUS": return await viewStatus();
     case "CONFIGURE": return await configure(message);
+    case "RECOVER_LOCAL_TOKEN": return await recoverLocalToken();
     case "START": return await start();
     case "SYNC": return await sync();
     case "SEND": return await send(message);

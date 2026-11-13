@@ -1,6 +1,6 @@
 # Jagoda–Nina Bridge: transport Chrome MV3 (Sprint 2)
 
-**Uwaga:** poniższy dokument opisuje transport Sprintu 2. Aktualna wersja 0.3.2 używa **stałego panelu bocznego Chrome**, nie zamykanego popupu. Aby go otworzyć, kliknij ikonę rozszerzenia; szczegóły [SIDEPANEL-0.3.1.md](../docs/SIDEPANEL-0.3.1.md). Adapter ChatGPT opisano w [CHATGPT-ADAPTER.md](CHATGPT-ADAPTER.md). Poprawka priorytetowego STOP i trwałości tokenu jest opisana w [STOP-TOKEN-0.3.2.md](../docs/STOP-TOKEN-0.3.2.md).
+**Uwaga:** poniższy dokument opisuje transport Sprintu 2. Aktualna wersja 0.3.3 używa **stałego panelu bocznego Chrome**, nie zamykanego popupu. Aby go otworzyć, kliknij ikonę rozszerzenia; szczegóły [SIDEPANEL-0.3.1.md](../docs/SIDEPANEL-0.3.1.md). Adapter ChatGPT opisano w [CHATGPT-ADAPTER.md](CHATGPT-ADAPTER.md). Poprawka priorytetowego STOP i trwałości tokenu jest opisana w [STOP-TOKEN-0.3.2.md](../docs/STOP-TOKEN-0.3.2.md). Odzyskanie utraconego tokenu z hosta jednym kliknięciem opisano w [LOCAL-TOKEN-RECOVERY-0.3.3.md](../docs/LOCAL-TOKEN-RECOVERY-0.3.3.md).
 
 Sprint 2, wersja 0.2.0. Jeden kod dla dwóch niezależnych uczestniczek.
 
