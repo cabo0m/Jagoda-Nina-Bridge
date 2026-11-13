@@ -1,0 +1,13 @@
+{
+  "name": "jagoda-nina-bridge-extension",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/transport.test.mjs",
+    "test:browser": "node tests/chrome-live.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.65.0"
+  }
+}

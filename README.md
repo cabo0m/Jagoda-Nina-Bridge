@@ -7,8 +7,8 @@ Fanowski eksperyment komunikacji dwóch asystentek ChatGPT (Nina i Jagoda) przez
 ## Status
 
 - **Sprint 0:** analiza architektury i audyt Video Summary, wykonane.
-- **Sprint 1:** lokalny serwer FastAPI + SQLite WAL, tokeny dwóch uczestników, REST API, lease/ACK/idempotencja, STOP, testy przez prawdziwy HTTP, wykonane. Oczekuje na odbiór właściciela.
-- Sprint 2: rozszerzenie Chrome transport (jeszcze nie rozpoczęte).
+- **Sprint 1:** lokalny serwer FastAPI + SQLite WAL, tokeny dwóch uczestników, REST API, lease/ACK/idempotencja, STOP, rzeczywiste HTTP, wykonane i odebrane przez przejście do Sprintu 2.
+- **Sprint 2:** rozszerzenie Chrome MV3: konfiguracja Jagody/Niny, ręczny transport, automatyczne sprawdzanie skrzynki co ok. 30 s, START/STOP i ACK. Testy dwóch prawdziwych profili Chromium z lokalnym serwerem PASS. Oczekuje na odbiór właściciela.
 - Sprint 3: adapter ChatGPT WWW (jeszcze nie rozpoczęte).
 - Sprint 4: kontrolowany live E2E z rzeczywistymi sesjami (jeszcze nie rozpoczęte).
 - Sprint 5: dokumentacja i ewentualne udostępnienie na GitHub (tylko po oddzielnej zgodzie).
@@ -39,14 +39,29 @@ W katalogu `server`:
 
 Test HTTP uruchamia tymczasowy serwer Uvicorn na 127.0.0.1, tworzy tymczasową bazę, przeprowadza wymianę Nina → Jagoda → Nina i zatrzymuje proces. Nie używa ChatGPT WWW ani żadnych sekretów produkcyjnych.
 
+## Rozszerzenie Chrome (Sprint 2)
+
+W Chrome 120+ włącz `chrome://extensions` → *Tryb dewelopera* → *Załaduj rozpakowane* i wskaż katalog `extension`. Po stronie Niny i Jagody użyj osobnych profili Chrome oraz oddzielnych tokenów wygenerowanych przez serwer. Prawdziwe profile ChatGPT nie są jeszcze używane.
+
+Testy rozszerzenia uruchamiane w katalogu `extension`:
+
+```powershell
+npm ci
+npm test
+npm run test:browser
+```
+
+Szczegóły uprawnień, przechowywania tokenów i działania w `extension/README.md`. Test prawdziwego Chromium wymaga zainstalowanego Playwright Chromium; nie dotyka zwykłych profili Chrome.
+
 ## Katalogi
 
 - `server/app`: API, schema SQLite, auth, provisioning.
 - `server/tests`: testy kontraktu, bezpieczeństwa i błędów.
 - `server/scripts`: test prawdziwego HTTP.
-- `extension`: zarezerwowany na Sprint 2.
+- `extension`: gotowe rozszerzenie MV3, popup, service worker, testy Chromium, instrukcja w `extension/README.md`.
 - `docs/API.md`: kontrakt HTTP i stany.
 - `docs/SECURITY.md`: bezpieczeństwo i znane ograniczenia.
+- `docs/SPRINT2-RESULTS.md`: wyniki dwóch profili Chromium, automatycznego alarmu i STOP.
 
 ## Granice
 

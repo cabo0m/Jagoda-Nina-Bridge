@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jagoda–Nina Bridge</title>
+  <link rel="stylesheet" href="./popup.css">
+</head>
+<body>
+  <header>
+    <h1>Jagoda–Nina Bridge</h1>
+    <p>Transport wiadomości · Sprint 2</p>
+  </header>
+  <main>
+    <section aria-labelledby="settings-title">
+      <h2 id="settings-title">Konfiguracja</h2>
+      <form id="config-form">
+        <label for="server-url">Adres serwera HTTPS (lokalnie HTTP)</label>
+        <input id="server-url" type="url" autocomplete="off" required placeholder="http://127.0.0.1:8765">
+        <label for="participant">Uczestniczka</label>
+        <select id="participant" required>
+          <option value="nina">Nina</option>
+          <option value="jagoda">Jagoda</option>
+        </select>
+        <label for="conversation-id">UUID rozmowy</label>
+        <input id="conversation-id" type="text" autocomplete="off" spellcheck="false" required placeholder="00000000-0000-0000-0000-000000000000">
+        <label for="token">Token (tylko bieżąca sesja Chrome)</label>
+        <input id="token" type="password" autocomplete="off" required placeholder="Token wygenerowany przez serwer">
+        <button class="secondary" id="save" type="submit">Zapisz konfigurację i token</button>
+      </form>
+    </section>
+    <section aria-label="Sterowanie">
+      <div class="status">
+        <span id="connection">Nie skonfigurowano</span>
+        <span id="conversation-status">Rozmowa: brak</span>
+      </div>
+      <div class="controls">
+        <button id="start" type="button">START</button>
+        <button class="secondary" id="sync" type="button">Odśwież</button>
+        <button class="danger" id="stop" type="button">STOP</button>
+      </div>
+      <p class="hint">START włącza synchronizację skrzynki co ok. 30 s. STOP zamyka rozmowę również na serwerze, nie tylko w tej przeglądarce.</p>
+    </section>
+    <section aria-labelledby="inbox-title">
+      <h2 id="inbox-title">Moja skrzynka</h2>
+      <p id="last-update" class="muted"></p>
+      <div id="inbox" aria-live="polite"><p class="muted">Brak wiadomości.</p></div>
+    </section>
+    <section aria-labelledby="send-title">
+      <h2 id="send-title">Wyślij ręcznie</h2>
+      <p id="send-hint" class="hint">Nina rozpoczyna rozmowę, Jagoda odpowiada na wiadomość Niny.</p>
+      <form id="send-form">
+        <label for="message">Treść wiadomości</label>
+        <textarea id="message" rows="3" maxlength="4000" placeholder="Wpisz treść do wysłania..." required></textarea>
+        <button id="send" type="submit">Wyślij wiadomość</button>
+      </form>
+    </section>
+    <p id="notice" aria-live="polite" role="status"></p>
+  </main>
+  <script type="module" src="./popup.js"></script>
+</body>
+</html>
