@@ -465,7 +465,7 @@ async function ensureChatBridge(binding) {
     files: ["chatgpt-bridge.js"],
   });
   const check = await chrome.tabs.sendMessage(binding.tabId, {
-    type: "JNB_PROBE", chatUrl: binding.chatUrl,
+    type: "JNB_PROBE_V2", chatUrl: binding.chatUrl,
   });
   if (!check?.ok || !check.result?.ready) {
     throw new Error(check?.error || "Dedykowana rozmowa ChatGPT jest niedostępna.");
@@ -628,7 +628,7 @@ async function maybeAutoBridge(snapshot) {
     await chrome.storage.session.set({[JOB_KEY]: job});
     if (stopRequested) throw new Error("Operator wybrał STOP przed wysłaniem promptu.");
     const response = await chrome.tabs.sendMessage(binding.tabId, {
-      type: "JNB_RUN", jobId: job.jobId, chatUrl: binding.chatUrl,
+      type: "JNB_RUN_V2", jobId: job.jobId, chatUrl: binding.chatUrl,
       prompt: formatBridgePrompt(incoming.content),
     });
     if (!response?.ok || !response.started) {

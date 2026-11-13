@@ -1,4 +1,4 @@
-# Jagoda–Nina Bridge 0.3.6: adapter ChatGPT (Sprint 3)
+# Jagoda–Nina Bridge 0.3.7: adapter ChatGPT (Sprint 3)
 
 Przed użyciem uruchom serwer i wykonaj bootstrap jak w `server/README` albo głównym `README.md`.
 
@@ -17,7 +17,7 @@ Przed użyciem uruchom serwer i wykonaj bootstrap jak w `server/README` albo gł
 - Token serwera pozostaje w chronionym `chrome.storage.local` z dostępem API tylko dla zaufanych kontekstów (od 0.3.2). Skrypt strony ChatGPT nie otrzymuje tokenu, jedynie przekazany prompt.
 - Po rozpoczęciu `dispatch-start` nie wolno automatycznie powtarzać promptu. Przy błędach, timeoutach lub zerwaniu sesji zobaczysz `needs_review` / stan niepewny. Zatrzymaj eksperyment i przejrzyj ręcznie rozmowę oraz SQLite.
 - STOP blokuje nowe operacje z rozszerzenia, lecz nie cofa promptu, który ChatGPT już otrzymał.
-- Testy `npm run test:adapter` używają podstawionego HTML imitującego najważniejsze selektory ChatGPT. **Nie jest to dowód działania z prawdziwym modelem**.
+- Testy `npm run test:adapter` używają dwóch wersji podstawionego HTML: starszego edytora `#prompt-textarea` i nowszego `form[data-chatgpt-composer] [data-composer-markdown]`. **Nie jest to dowód działania z prawdziwym modelem**.
 - Używaj dedykowanej rozmowy i nie włączaj prywatnej pamięci do eksperymentu. Sam prompt nie wyłącza kontowej personalizacji ChatGPT; nie należy podawać sekretów ani wrażliwych danych.
 
 ## Testy

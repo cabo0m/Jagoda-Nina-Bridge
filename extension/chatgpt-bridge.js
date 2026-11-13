@@ -1,7 +1,9 @@
 /* Isolated content script, installed programmatically in ONE bound conversation. */
 (() => {
-  if (globalThis.__JNB_CHAT_BRIDGE_V1__) return;
-  globalThis.__JNB_CHAT_BRIDGE_V1__ = true;
+  // V2 uses distinct message names so an older content script lingering in
+  // the same tab after an extension reload cannot answer our readiness check.
+  if (globalThis.__JNB_CHAT_BRIDGE_V2__) return;
+  globalThis.__JNB_CHAT_BRIDGE_V2__ = true;
   let running = false;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const normalize = text => String(text ?? "").replace(/\s+/g, " ").trim();
@@ -17,17 +19,49 @@
       getComputedStyle(node).visibility !== "hidden");
   }
   function editor() {
+    // Prefer attributes specific to the MAIN ChatGPT composer. The newer
+    // app-shell no longer always supplies #prompt-textarea. Never use a
+    // completely unscoped .ProseMirror: edit-message boxes share that class.
     const selectors = [
       '#prompt-textarea[contenteditable="true"]',
       '#prompt-textarea[contenteditable="plaintext-only"]',
-      'div.ProseMirror[contenteditable="true"]#prompt-textarea',
       'textarea#prompt-textarea',
+      'textarea[name="prompt-textarea"]',
+      'textarea#mobile-composer-prompt',
+      '[data-testid="prompt-textarea"][contenteditable="true"]',
+      'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
+      'form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"]',
+      '[data-composer-input] [contenteditable="true"][role="textbox"]',
+      '[data-composer-input] [contenteditable="true"]',
+      'form[data-chatgpt-composer] [contenteditable="true"][role="textbox"]',
+      'form[data-chatgpt-composer] textarea',
+      '[data-composer-markdown][contenteditable="true"][role="textbox"]',
+      '[data-composer-markdown][contenteditable="true"]',
+      'form [data-testid="composer-input"][contenteditable="true"]',
     ];
     for (const selector of selectors) {
-      const node = [...document.querySelectorAll(selector)].find(visible);
-      if (node) return node;
+      const nodes = [...document.querySelectorAll(selector)]
+        .filter(n => visible(n) && !n.closest('[role="dialog"],[aria-hidden="true"]') &&
+          (n instanceof HTMLTextAreaElement || n.isContentEditable) &&
+          n.getAttribute("aria-disabled") !== "true" && !n.hasAttribute("disabled"));
+      if (nodes.length === 1) return nodes[0];
+      if (nodes.length > 1) return null; // Ambiguous composer, fail closed.
     }
     return null;
+  }
+  function editorDiagnostics() {
+    // Structural counts only. No text, URLs, titles, editor values or personal
+    // content are ever included in diagnostics.
+    const all = [...document.querySelectorAll('[contenteditable],textarea,[role="textbox"]')];
+    const editable = all.filter(n => n.isContentEditable ||
+      n instanceof HTMLTextAreaElement);
+    return [
+      "formularze=" + document.querySelectorAll('form[data-chatgpt-composer]').length,
+      "composer=" + document.querySelectorAll('[data-composer-input],[data-composer-markdown]').length,
+      "edytowalne=" + editable.length,
+      "widoczne=" + editable.filter(visible).length,
+      "iframe=" + document.querySelectorAll('iframe').length,
+    ].join(", ");
   }
   const editorText = node => String(node?.value ?? node?.innerText ?? node?.textContent ?? "");
   function messages(role) {
@@ -51,10 +85,27 @@
   function probe(url) {
     requireBound(url);
     const node = editor();
-    if (!node) throw new Error("Brak gotowego edytora ChatGPT (zaloguj się i otwórz rozmowę).");
+    if (!node) throw new Error("Nie rozpoznano głównego edytora ChatGPT (" +
+      editorDiagnostics() + "). Sprawdź, czy rozmowa jest załadowana i czy nie ma otwartego okna dialogowego.");
     if (normalize(editorText(node))) throw new Error("Edytor zawiera tekst. Usuń go przed eksperymentem.");
     if (generating()) throw new Error("ChatGPT już generuje odpowiedź.");
     return {ready: true, url, assistantCount: messages("assistant").length};
+  }
+  async function probeWithWait(url) {
+    const deadline = Date.now() + 5500;
+    let lastError;
+    while (Date.now() < deadline) {
+      requireBound(url);
+      try { return probe(url); }
+      catch (error) {
+        if (!String(error.message).startsWith("Nie rozpoznano głównego edytora")) {
+          throw error;
+        }
+        lastError = error;
+      }
+      await sleep(220);
+    }
+    throw lastError || new Error("Edytor ChatGPT nie pojawił się w przewidzianym czasie.");
   }
   function insert(node, text) {
     node.focus();
@@ -130,7 +181,7 @@
     if (running) throw new Error("Ten wątek ma już aktywny przebieg.");
     running = true;
     try {
-      const baseline = probe(job.chatUrl);
+      const baseline = await probeWithWait(job.chatUrl);
       if (!job.jobId || !job.prompt || String(job.prompt).length > 6000) {
         throw new Error("Błędny format zadania.");
       }
@@ -143,12 +194,14 @@
     } finally { running = false; }
   }
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
-    if (message?.type === "JNB_PROBE") {
-      try { respond({ok:true, result:probe(message.chatUrl)}); }
-      catch(error) {respond({ok:false,error:String(error.message).slice(0,300)});}
-      return false;
+    if (message?.type === "JNB_PROBE_V2") {
+      void probeWithWait(message.chatUrl).then(
+        result => respond({ok:true, result}),
+        error => respond({ok:false,error:String(error.message).slice(0,320)}),
+      );
+      return true;
     }
-    if (message?.type === "JNB_RUN") {
+    if (message?.type === "JNB_RUN_V2") {
       if (running) {
         respond({ok:false,error:"Przebieg już trwa."});
         return false;

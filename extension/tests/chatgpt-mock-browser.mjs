@@ -139,6 +139,29 @@ async function main(){
     await home.close();
     console.log("MOCK CHROMIUM UNINITIALIZED CHAT PASS: open ChatGPT without /c/ gives precise inline error.");
 
+    // React may hydrate the new composer after the page becomes visible.
+    // A ready conversation must not fail a one-shot, immediate probe.
+    fixtureBody=readFileSync(join(extension,"tests","fake-chatgpt-composer-2026.html"),"utf8")
+      .replace('data-composer-markdown class=', 'data-composer-markdown style="display:none" class=')
+      .replace("</script>", `setTimeout(() => {
+        document.querySelector('[data-composer-markdown]').style.display = 'block';
+      }, 1100);</script>`);
+    const delayedUrl="https://chatgpt.com/c/"+randomUUID();
+    const delayedPage=await jagoda.context.newPage();
+    await delayedPage.goto(delayedUrl);
+    await jagoda.popup.locator("#chat-url").fill(delayedUrl);
+    await jagoda.popup.locator("#bind-chatgpt").click();
+    await jagoda.popup.waitForFunction(() =>
+      document.querySelector("#chatgpt-status")?.textContent.includes("Przypięto kartę"),
+      null,{timeout:11000});
+    await jagoda.popup.locator("#unbind-chatgpt").click();
+    await jagoda.popup.waitForFunction(() =>
+      document.querySelector("#chatgpt-status")?.textContent.includes("Brak przypiętej"),
+      null,{timeout:9000});
+    await delayedPage.close();
+    fixtureBody=fixture;
+    console.log("MOCK CHROMIUM DELAYED COMPOSER PASS: waited for hydration without any prompt.");
+
     const irrelevant=await jagoda.context.newPage();
     await irrelevant.goto(otherUrl);
     const dedicated=await jagoda.context.newPage();
@@ -174,8 +197,12 @@ async function main(){
     await jagoda.popup.locator("#chat-url").fill(otherUrl);
     await jagoda.popup.locator("#bind-chatgpt").click();
     await jagoda.popup.waitForFunction(() =>
-      document.querySelector("#chatgpt-feedback")?.textContent.includes("Brak gotowego edytora"),
+      document.querySelector("#chatgpt-feedback")?.textContent.includes("Nie rozpoznano głównego edytora ChatGPT"),
       null,{timeout:9000});
+    const structureError=await jagoda.popup.locator("#chatgpt-feedback").textContent();
+    assert.match(structureError,/edytowalne=\d+, widoczne=\d+/);
+    assert.ok(!structureError.includes("OLD ASSISTANT MESSAGE"),
+      "Diagnostic leaked ChatGPT message content");
     const untouched=await httpJson(base,jagodaToken,"GET","/v1/inbox");
     assert.equal(untouched.messages.length,1);
     assert.equal(untouched.messages[0].status,"queued");
@@ -262,7 +289,7 @@ async function main(){
     };
     await reconfigure(nina.popup,ninaToken);
     await reconfigure(jagoda.popup,jagodaToken);
-    fixtureBody=fixture.replace("}, 500);","}, 4000);");
+    fixtureBody=readFileSync(join(extension,"tests","fake-chatgpt-composer-2026.html"),"utf8");
     const nextChatUrl="https://chatgpt.com/c/"+randomUUID();
     const nextChat=await jagoda.context.newPage();
     await nextChat.goto(nextChatUrl);
@@ -276,6 +303,11 @@ async function main(){
     await jagoda.popup.waitForFunction(() =>
       document.querySelector("#chatgpt-status")?.textContent.includes("dispatched"),
       null,{timeout:10000});
+    await nextChat.locator('[data-message-author-role="user"]').waitFor({timeout:8000});
+    assert.ok((await nextChat.locator('[data-message-author-role="user"]').last().textContent())
+      .includes("Nina: kolejny test z ręcznym STOP."));
+    assert.equal(await nextChat.locator('[data-edit-message]').textContent(),"");
+    console.log("MOCK CHROMIUM 2026 COMPOSER PASS: new form[data-chatgpt-composer] found, edit-message ProseMirror ignored, prompt sent.");
     jagoda.popup.once("dialog", dialog => dialog.accept());
     await jagoda.popup.locator("#stop").click();
     await jagoda.popup.waitForFunction(() =>

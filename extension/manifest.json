@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Jagoda–Nina Bridge (eksperyment)",
-  "version": "0.3.6",
-  "description": "Jagoda–Nina Bridge: obsługa sterowania z kart URL hash, czytelne błędy START i bezpieczne zachowanie tokenu.",
+  "version": "0.3.7",
+  "description": "Jagoda–Nina Bridge: adapter V2 obsługuje nowe edytory ChatGPT i bezpieczną diagnostykę struktury.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
