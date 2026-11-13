@@ -397,3 +397,52 @@ test("STOP works locally even after both token stores were erased", async () => 
   assert.equal(worker.local.data[core.ACTIVE_KEY], false);
   assert.equal((await worker.good({type: "GET_STATUS"})).snapshot.remoteStopUnknown, true);
 });
+
+
+test("switch to fresh server conversation retains token and starts without reconfiguration", async () => {
+  await withServer(async ({base, setup, db}) => {
+    const jagoda=createWorker();
+    await setupWorker(jagoda,base,setup,"jagoda");
+    await jagoda.good({type:"START"});
+    await jagoda.good({type:"STOP"});
+    const stopped=await jagoda.good({type:"GET_STATUS"});
+    assert.equal(stopped.snapshot.conversation.status,"stopped");
+    const newId="a22ba41e-9674-4b15-a858-504b37c31222";
+    execFileSync(python,["-c",
+      "import sqlite3,sys,datetime; c=sqlite3.connect(sys.argv[1]); c.execute('INSERT INTO conversations(id,status,max_messages,created_at) VALUES(?,?,2,?)',(sys.argv[2],'open',datetime.datetime.now(datetime.timezone.utc).isoformat())); c.commit(); c.close()",
+      db,newId],{cwd:server,windowsHide:true});
+    const selected=await jagoda.good({type:"USE_CURRENT_CONVERSATION"});
+    assert.equal(selected.active,true);
+    assert.equal(selected.tokenReady,true);
+    assert.equal(selected.config.conversationId,newId);
+    assert.equal(selected.snapshot.conversation.status,"open");
+    assert.equal(selected.snapshot.conversation.message_count,0);
+    assert.equal(jagoda.local.data[core.TOKEN_KEY],setup.jagoda);
+    assert.equal(jagoda.local.data[core.CONFIG_KEY].conversationId,newId);
+    assert.ok(!JSON.stringify(selected).includes(setup.jagoda));
+    const old=await fetch(base+"/v1/conversations/"+setup.id,{
+      headers:{"Authorization":"Bearer "+setup.jagoda}
+    });
+    assert.equal((await old.json()).status,"stopped");
+  });
+});
+
+
+test("fresh conversation is created on demand after STOP without reentering token", async () => {
+  await withServer(async ({base, setup}) => {
+    const jagoda=createWorker();
+    await setupWorker(jagoda,base,setup,"jagoda");
+    await jagoda.good({type:"START"});
+    await jagoda.good({type:"STOP"});
+    const next=await jagoda.good({type:"USE_CURRENT_CONVERSATION"});
+    assert.notEqual(next.config.conversationId,setup.id);
+    assert.equal(next.snapshot.conversation.status,"open");
+    assert.equal(next.active,true);
+    assert.equal(next.tokenReady,true);
+    assert.equal(jagoda.local.data[core.TOKEN_KEY],setup.jagoda);
+    const active=await fetch(base+"/v1/current-conversation",{
+      headers:{"Authorization":"Bearer "+setup.jagoda}
+    });
+    assert.equal((await active.json()).id,next.config.conversationId);
+  });
+});

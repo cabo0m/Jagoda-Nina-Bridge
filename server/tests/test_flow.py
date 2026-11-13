@@ -259,3 +259,74 @@ def test_bootstrap_is_one_time_and_no_plain_tokens_in_db(bridge):
                 "id,conversation_id,sender_id,recipient_id,content,status,created_at,"
                 "idempotency_key) VALUES('bad','missing','nina','jagoda','x','queued','now','bad')"
             )
+
+
+def test_current_conversation_api_returns_only_unique_open_session(bridge):
+    client, setup, db = bridge
+    endpoint = "/v1/current-conversation"
+    assert client.get(endpoint).status_code == 401
+    response = client.get(endpoint, headers=auth(setup, "jagoda"))
+    assert response.status_code == 200
+    assert response.json() == {"id": setup["conversation_id"], "status": "open"}
+
+    assert client.post(
+        f"/v1/conversations/{setup['conversation_id']}/stop",
+        headers=auth(setup, "jagoda"),
+    ).status_code == 200
+    missing = client.get(endpoint, headers=auth(setup, "jagoda"))
+    assert missing.status_code == 404
+
+    import uuid
+    from app.db import now_utc
+    new_id = str(uuid.uuid4())
+    with connect(db) as sql:
+        sql.execute(
+            "INSERT INTO conversations(id,status,max_messages,created_at) "
+            "VALUES(?,'open',2,?)", (new_id, now_utc()),
+        )
+    after = client.get(endpoint, headers=auth(setup, "nina"))
+    assert after.status_code == 200
+    assert after.json() == {"id": new_id, "status": "open"}
+    with connect(db) as sql:
+        sql.execute(
+            "INSERT INTO conversations(id,status,max_messages,created_at) "
+            "VALUES(?,'open',2,?)", (str(uuid.uuid4()), now_utc()),
+        )
+    ambiguous = client.get(endpoint, headers=auth(setup, "jagoda"))
+    assert ambiguous.status_code == 409
+
+
+def test_ensure_open_reuses_active_then_creates_once_after_stop(bridge):
+    client, setup, db = bridge
+    endpoint = "/v1/conversations/ensure-open"
+    assert client.post(endpoint).status_code == 401
+    assert client.post(endpoint, headers=auth(setup, "nina")).status_code == 403
+    first = client.post(endpoint, headers=auth(setup, "jagoda"))
+    assert first.status_code == 200
+    assert first.json() == {
+        "id": setup["conversation_id"], "status": "open", "created": False
+    }
+    assert client.post(
+        f"/v1/conversations/{setup['conversation_id']}/stop",
+        headers=auth(setup, "jagoda"),
+    ).status_code == 200
+    created = client.post(endpoint, headers=auth(setup, "jagoda"))
+    assert created.status_code == 200
+    created_id = created.json()["id"]
+    assert created_id != setup["conversation_id"]
+    assert created.json()["created"] is True
+    assert client.post(endpoint, headers=auth(setup, "jagoda")).json() == {
+        "id": created_id, "status": "open", "created": False
+    }
+    with connect(db) as sql:
+        assert sql.execute(
+            "SELECT count(*) FROM conversations WHERE status='open'"
+        ).fetchone()[0] == 1
+        assert sql.execute(
+            "SELECT status FROM conversations WHERE id=?",
+            (setup["conversation_id"],),
+        ).fetchone()[0] == "stopped"
+        assert sql.execute(
+            "SELECT max_messages FROM conversations WHERE id=?",
+            (created_id,),
+        ).fetchone()[0] == 2

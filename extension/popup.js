@@ -15,7 +15,7 @@ function tell(text, isError = false) {
 function setBusy(value) {
   busy = value;
   // Emergency STOP must never be disabled by a concurrent operation.
-  for (const id of ["save", "recover-local", "start", "sync", "send", "bind-chatgpt", "bind-current-chatgpt", "unbind-chatgpt"]) {
+  for (const id of ["save", "recover-local", "use-current", "start", "sync", "send", "bind-chatgpt", "bind-current-chatgpt", "unbind-chatgpt"]) {
     $(id).disabled = value;
   }
 }
@@ -29,7 +29,13 @@ async function call(type, payload = {}) {
 }
 
 function populateForm(config) {
-  if (initialFormLoaded || !config) return;
+  if (!config) return;
+  if (initialFormLoaded) {
+    if (document.activeElement !== $("conversation-id")) {
+      $("conversation-id").value = config.conversationId;
+    }
+    return;
+  }
   $("server-url").value = config.serverUrl;
   $("participant").value = config.participant;
   $("conversation-id").value = config.conversationId;
@@ -88,6 +94,7 @@ function render(state) {
   $("last-update").textContent = snapshot.lastSync
     ? `Ostatni odczyt: ${new Date(snapshot.lastSync).toLocaleTimeString("pl-PL")}`
     : "Brak odczytów skrzynki.";
+  $("use-current").disabled = busy || !state.tokenReady || state.active;
   $("start").disabled = busy || !state.tokenReady || state.active ||
     conversation.status === "stopped" || Boolean(snapshot.remoteStopUnknown);
   $("sync").disabled = busy || !state.tokenReady;
@@ -198,6 +205,12 @@ $("config-form").addEventListener("submit", async event => {
     return result;
   });
 });
+
+$("use-current").addEventListener("click", () => void doAction(async () => {
+  const result = await call("USE_CURRENT_CONVERSATION");
+  tell("Nowa rozmowa Bridge aktywna. Token zachowany. Możesz przypiąć kartę ChatGPT.");
+  return result;
+}));
 
 $("start").addEventListener("click", () => doAction(async () => {
   const result = await call("START");

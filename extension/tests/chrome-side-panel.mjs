@@ -40,7 +40,7 @@ try {
     await new Promise(ok=>setTimeout(ok,150));
   }
   assert.equal(result.manifest.manifest_version,3);
-  assert.equal(result.manifest.version,"0.3.3");
+  assert.equal(result.manifest.version,"0.3.4");
   assert.ok(result.manifest.permissions.includes("sidePanel"));
   assert.equal(result.manifest.action.default_popup,undefined);
   assert.equal(result.path,"popup.html");
@@ -78,6 +78,8 @@ try {
   // Scroll section: adapter must be reachable and its status visible.
   await page.locator("#bind-current-chatgpt").scrollIntoViewIfNeeded();
   assert.equal(await page.locator("#bind-current-chatgpt").isVisible(),true);
+  assert.equal(await page.locator("#use-current").isVisible(),true,
+    "Przycisk zmiany rozmowy Bridge musi być widoczny w panelu.");
   assert.ok((await page.locator("#chatgpt-status").textContent()).includes("Brak przypiętej"));
   console.log("REAL CHROMIUM ADAPTER UI PASS: separate ChatGPT bind control and no silent status change.");
 

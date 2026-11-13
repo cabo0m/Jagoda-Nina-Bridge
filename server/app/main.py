@@ -65,6 +65,42 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
     def health() -> dict:
         return {"status": "ok"}
 
+    @app.post("/v1/conversations/ensure-open")
+    def ensure_open_conversation(who: str = Depends(require_participant)):
+        """Exactly one open conversation. Only Jagoda may create a fresh one."""
+        if who != "jagoda":
+            raise problem(403, "Only Jagoda may start a fresh Bridge conversation")
+        with write_transaction(path) as db:
+            rows = db.execute(
+                "SELECT id FROM conversations WHERE status='open' "
+                "ORDER BY created_at LIMIT 2"
+            ).fetchall()
+            if len(rows) > 1:
+                raise problem(409, "Multiple open conversations require operator review")
+            if rows:
+                return {"id": rows[0]["id"], "status": "open", "created": False}
+            new_id = str(uuid.uuid4())
+            db.execute(
+                "INSERT INTO conversations(id,status,max_messages,created_at) "
+                "VALUES(?,'open',2,?)",
+                (new_id, now_utc()),
+            )
+        return {"id": new_id, "status": "open", "created": True}
+
+    @app.get("/v1/current-conversation")
+    def current_conversation(who: str = Depends(require_participant)):
+        """Return the one open experiment, never create it via client request."""
+        with connect(path) as db:
+            rows = db.execute(
+                "SELECT id FROM conversations WHERE status='open' "
+                "ORDER BY created_at LIMIT 2"
+            ).fetchall()
+        if not rows:
+            raise problem(404, "Brak otwartej rozmowy Bridge. Utwórz nową na hoście.")
+        if len(rows) != 1:
+            raise problem(409, "Więcej niż jedna otwarta rozmowa. Wymagana kontrola operatora.")
+        return {"id": rows[0]["id"], "status": "open"}
+
     @app.get("/v1/conversations/{conversation_id}")
     def conversation(conversation_id: uuid.UUID, who: str = Depends(require_participant)):
         with connect(path) as db:

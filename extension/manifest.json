@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Jagoda–Nina Bridge (eksperyment)",
-  "version": "0.3.3",
-  "description": "Jagoda–Nina Bridge: stały panel, awaryjny STOP i jednorazowe lokalne odzyskiwanie tokenu.",
+  "version": "0.3.4",
+  "description": "Jagoda–Nina Bridge: panel boczny, STOP i przełączanie na nową rozmowę bez utraty tokenu.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",

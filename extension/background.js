@@ -277,6 +277,41 @@ async function recoverLocalToken() {
   return await viewStatus();
 }
 
+async function useCurrentConversation() {
+  const state = await getConfig();
+  const {config, token} = requireSession(state);
+  if (state.active) {
+    throw new Error("Najpierw zatrzymaj obecną synchronizację.");
+  }
+  if (state.bridgeJob || state.outgoing) {
+    throw new Error("Istnieje niezakończona operacja. Nie wolno zmieniać UUID.");
+  }
+  const opened = await serverRequest(config, token, "POST", "/v1/conversations/ensure-open");
+  const id = validateUuid(opened.id);
+  if (opened.status !== "open") {
+    throw new Error("Serwer nie potwierdził otwartej rozmowy.");
+  }
+  // A remote STOP is definitive even if the old panel snapshot is stale.
+  const previous = await serverRequest(
+    config, token, "GET",
+    `/v1/conversations/${encodeURIComponent(config.conversationId)}`,
+  );
+  if (previous.status !== "stopped" &&
+      !(previous.status === "open" && config.conversationId === id)) {
+    throw new Error("Poprzednia rozmowa nie jest zatrzymana. Nie można jej porzucić.");
+  }
+  // Preserve the persistent participant token. Clear only obsolete
+  // per-conversation state; never rotate credentials.
+  await chrome.storage.session.remove([
+    SNAPSHOT_KEY, OUTGOING_KEY, LEASES_KEY, BINDING_KEY, JOB_KEY,
+  ]);
+  await chrome.storage.local.set({
+    [CONFIG_KEY]: {...config, conversationId: id},
+    [ACTIVE_KEY]: false,
+  });
+  return await start(); // Explicit button click is the only trigger.
+}
+
 async function start() {
   const currentStopEpoch = stopEpoch;
   const state = await getConfig();
@@ -622,6 +657,7 @@ async function handle(message) {
     case "GET_STATUS": return await viewStatus();
     case "CONFIGURE": return await configure(message);
     case "RECOVER_LOCAL_TOKEN": return await recoverLocalToken();
+    case "USE_CURRENT_CONVERSATION": return await useCurrentConversation();
     case "START": return await start();
     case "SYNC": return await sync();
     case "SEND": return await send(message);
