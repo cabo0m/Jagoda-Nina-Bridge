@@ -1,12 +1,13 @@
 {
   "name": "jagoda-nina-bridge-extension",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test tests/transport.test.mjs",
     "test:browser": "node tests/chrome-live.mjs",
-    "test:adapter": "node tests/chatgpt-mock-browser.mjs"
+    "test:adapter": "node tests/chatgpt-mock-browser.mjs",
+    "test:panel": "node tests/chrome-side-panel.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.65.0"

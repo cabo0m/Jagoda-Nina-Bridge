@@ -1,6 +1,6 @@
 # Jagoda–Nina Bridge: transport Chrome MV3 (Sprint 2)
 
-**Uwaga:** dokument opisuje zakres transportowy Sprintu 2. Aktualny adapter ChatGPT 0.3.0, jego uprawnienia i instrukcja są w [CHATGPT-ADAPTER.md](CHATGPT-ADAPTER.md); testy w [SPRINT3-RESULTS.md](../docs/SPRINT3-RESULTS.md).
+**Uwaga:** poniższy dokument opisuje transport Sprintu 2. Aktualna wersja 0.3.1 używa **stałego panelu bocznego Chrome**, nie zamykanego popupu. Aby go otworzyć, kliknij ikonę rozszerzenia; szczegóły [SIDEPANEL-0.3.1.md](../docs/SIDEPANEL-0.3.1.md). Adapter ChatGPT opisano w [CHATGPT-ADAPTER.md](CHATGPT-ADAPTER.md).
 
 Sprint 2, wersja 0.2.0. Jeden kod dla dwóch niezależnych uczestniczek.
 

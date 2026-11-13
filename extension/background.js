@@ -392,6 +392,27 @@ async function bindChatGPT(value) {
   return await viewStatus();
 }
 
+async function bindActiveChatGPT() {
+  const state = await getConfig();
+  const {config} = requireSession(state);
+  if (config.participant !== "jagoda") {
+    throw new Error("Przypinanie ChatGPT jest dostępne tylko dla Jagody.");
+  }
+  if (!state.active) {
+    throw new Error("Najpierw kliknij START.");
+  }
+  // No account-wide tab enumeration. Only inspect a currently active
+  // tab with permission already granted to the ChatGPT origin.
+  const active = await chrome.tabs.query({
+    active: true, currentWindow: true, url: "https://chatgpt.com/*",
+  });
+  if (active.length !== 1 || typeof active[0].url !== "string") {
+    throw new Error("Przełącz główną kartę Chrome na otwartą rozmowę ChatGPT, a potem kliknij przypinanie.");
+  }
+  const url = normalizeThreadUrl(active[0].url);
+  return await bindChatGPT(url);
+}
+
 async function unbindChatGPT() {
   const state = await getConfig();
   if (state.bridgeJob) throw new Error("Nie można odpiąć rozmowy w trakcie przetwarzania.");
@@ -524,6 +545,7 @@ async function handle(message) {
     case "SEND": return await send(message);
     case "ACK": return await ack(message.messageId);
     case "BIND_CHATGPT": return await bindChatGPT(message.chatUrl);
+    case "BIND_ACTIVE_CHATGPT": return await bindActiveChatGPT();
     case "UNBIND_CHATGPT": return await unbindChatGPT();
     case "STOP": return await stop();
     default: throw new Error("Nieznana operacja rozszerzenia.");
@@ -550,6 +572,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   );
   return true;
 });
+
+// Global side panel stays available when changing browser tabs.
+// Action click toggles it. No default_popup is declared in manifest 0.3.1.
+void chrome.sidePanel.setPanelBehavior({openPanelOnActionClick: true})
+  .catch(error => console.warn("Jagoda–Nina side panel unavailable:", String(error)));
 
 chrome.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === ALARM_NAME) {

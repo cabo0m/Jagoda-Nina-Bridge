@@ -60,6 +60,12 @@ function createWorker(fetchOverride = fetch) {
     permissions: {
       async contains({origins}) {return origins.every(origin => permissions.has(origin));},
     },
+    sidePanel: {
+      async setPanelBehavior(options) {listeners.sidePanelBehavior = options;},
+    },
+    tabs: {
+      async query() {return [];},
+    },
   };
   const context = vm.createContext({
     ...core, ...adapter, chrome, crypto: webcrypto, fetch: fetchOverride,
@@ -181,7 +187,9 @@ test("normalization, strict scope and minimum manifest permissions", () => {
   assert.throws(() => core.validateUuid("not-an-uuid"));
   assert.throws(() => core.validateToken("test"));
   const manifest = JSON.parse(readFileSync(join(extension, "manifest.json"), "utf8"));
-  assert.deepEqual(manifest.permissions, ["storage", "alarms", "scripting"]);
+  assert.deepEqual(manifest.permissions, ["storage", "alarms", "scripting", "sidePanel"]);
+  assert.equal(manifest.side_panel.default_path, "popup.html");
+  assert.equal(manifest.action.default_popup, undefined);
   assert.equal(manifest.manifest_version, 3);
   assert.ok(!("content_scripts" in manifest));
   assert.deepEqual(manifest.host_permissions, ["http://127.0.0.1/*", "http://localhost/*", "https://chatgpt.com/*"]);

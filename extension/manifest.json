@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Jagoda–Nina Bridge (eksperyment)",
-  "version": "0.3.0",
-  "description": "Eksperymentalny transport Nina–Jagoda oraz adapter jednej dedykowanej rozmowy ChatGPT. Bez dostępu do innych rozmów.",
+  "version": "0.3.1",
+  "description": "Jagoda–Nina Bridge: stały panel boczny Chrome, transport dwóch wiadomości i adapter dedykowanego czatu.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
     "alarms",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
   "host_permissions": [
     "http://127.0.0.1/*",
@@ -22,7 +23,9 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Jagoda–Nina Bridge",
-    "default_popup": "popup.html"
+    "default_title": "Otwórz / zamknij panel Jagoda–Nina"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   }
 }

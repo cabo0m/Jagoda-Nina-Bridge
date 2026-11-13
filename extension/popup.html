@@ -3,15 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Jagoda–Nina Bridge</title>
+  <title>Jagoda–Nina Bridge: panel boczny</title>
   <link rel="stylesheet" href="./popup.css">
 </head>
-<body>
+<body class="side-panel">
   <header>
     <h1>Jagoda–Nina Bridge</h1>
-    <p>Transport wiadomości · Sprint 2</p>
+    <p>Stały panel boczny · transport i ChatGPT</p>
   </header>
   <main>
+    <p id="notice" aria-live="polite" role="status"></p>
     <section aria-labelledby="settings-title">
       <h2 id="settings-title">Konfiguracja</h2>
       <form id="config-form">
@@ -43,14 +44,16 @@
     </section>
     <section aria-labelledby="chatgpt-title">
       <h2 id="chatgpt-title">Adapter ChatGPT (Sprint 3)</h2>
-      <p class="hint">Tylko Jagoda: przypnij jedną otwartą rozmowę ChatGPT. Nina nadal wysyła pierwszą wiadomość ręcznie. Nie są odczytywane inne wątki.</p>
+      <p class="hint">To nie jest UUID rozmowy Bridge. Otwórz dedykowany wątek ChatGPT w głównej karcie przeglądarki, a następnie kliknij:</p>
+      <button id="bind-current-chatgpt" class="primary-wide" type="button">Przypnij aktywną kartę ChatGPT</button>
+      <p class="hint">Ewentualnie wklej pełny adres https://chatgpt.com/c/... i kliknij Przypnij:</p>
       <label for="chat-url">Dedykowana rozmowa ChatGPT</label>
       <input id="chat-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://chatgpt.com/c/00000000-0000-0000-0000-000000000000">
-      <div class="controls">
+      <div class="controls adapter-controls">
         <button id="bind-chatgpt" type="button">Przypnij</button>
         <button id="unbind-chatgpt" class="secondary" type="button">Odepnij</button>
       </div>
-      <p class="hint" id="chatgpt-status">Brak przypiętej rozmowy.</p>
+      <p class="hint" id="chatgpt-status">Brak przypiętej rozmowy. Samo wpisanie adresu niczego nie przypina.</p>
     </section>
     <section aria-labelledby="inbox-title">
       <h2 id="inbox-title">Moja skrzynka</h2>
@@ -66,7 +69,6 @@
         <button id="send" type="submit">Wyślij wiadomość</button>
       </form>
     </section>
-    <p id="notice" aria-live="polite" role="status"></p>
   </main>
   <script type="module" src="./popup.js"></script>
 </body>

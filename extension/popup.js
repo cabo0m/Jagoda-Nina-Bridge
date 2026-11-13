@@ -13,7 +13,7 @@ function tell(text, isError = false) {
 
 function setBusy(value) {
   busy = value;
-  for (const id of ["save", "start", "sync", "stop", "send", "bind-chatgpt", "unbind-chatgpt"]) {
+  for (const id of ["save", "start", "sync", "stop", "send", "bind-chatgpt", "bind-current-chatgpt", "unbind-chatgpt"]) {
     $(id).disabled = value;
   }
 }
@@ -112,13 +112,14 @@ function render(state) {
   $("send").disabled = busy || !sendAllowed || (identity === "jagoda" && Boolean(state.chatgpt));
   $("bind-chatgpt").disabled = busy || !state.active || identity !== "jagoda" ||
     Boolean(state.bridgeJob) || Boolean(state.chatgpt);
+  $("bind-current-chatgpt").disabled = $("bind-chatgpt").disabled;
   $("unbind-chatgpt").disabled = busy || !state.chatgpt || Boolean(state.bridgeJob);
   if (state.chatgpt && !$("chat-url").value) $("chat-url").value = state.chatgpt.chatUrl;
   $("chatgpt-status").textContent = state.bridgeJob
     ? `Zadanie ${state.bridgeJob.phase}: ${state.bridgeJob.error || state.bridgeJob.id}`
     : state.chatgpt
       ? `Przypięto kartę ${state.chatgpt.tabId}: ${state.chatgpt.chatUrl}`
-      : "Brak przypiętej rozmowy.";
+      : "Brak przypiętej rozmowy. Otwórz wątek ChatGPT i kliknij »Przypnij aktywną kartę«. UUID Bridge to inne pole.";
   $("send-hint").textContent = identity === "jagoda"
     ? snapshot.lastInboundId
       ? `Odpowiedź na wiadomość: ${snapshot.lastInboundId}`
@@ -217,6 +218,13 @@ $("send-form").addEventListener("submit", event => {
     return call("GET_STATUS");
   });
 });
+
+$("bind-current-chatgpt").addEventListener("click", () => void doAction(async () => {
+  const result = await call("BIND_ACTIVE_CHATGPT");
+  if (result.chatgpt?.chatUrl) $("chat-url").value = result.chatgpt.chatUrl;
+  tell("Przypięłam aktualnie otwartą kartę ChatGPT. Adres powiązano z Jagodą.");
+  return result;
+}));
 
 $("bind-chatgpt").addEventListener("click", () => void doAction(async () => {
   const result = await call("BIND_CHATGPT", {chatUrl: $("chat-url").value});

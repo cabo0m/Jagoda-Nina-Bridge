@@ -138,6 +138,15 @@ async function main(){
     assert.equal((await httpJson(base,jagodaToken,"GET",`/v1/conversations/${conversationId}`)).message_count,0);
     console.log("MOCK CHROMIUM BIND SCOPE PASS: unrelated tabs do not bind.");
 
+    // A Bridge UUID by itself must NOT silently become a ChatGPT thread.
+    await jagoda.popup.locator("#chat-url").fill(conversationId);
+    await jagoda.popup.locator("#bind-chatgpt").click();
+    await jagoda.popup.waitForFunction(() =>
+      document.querySelector("#notice")?.textContent.includes("Podaj pełny adres dedykowanej rozmowy ChatGPT"),
+      null,{timeout:9000});
+    assert.ok((await jagoda.popup.locator("#chatgpt-status").textContent()).includes("Brak przypiętej rozmowy"));
+    console.log("MOCK CHROMIUM WRONG UUID PASS: inline error visible; status remains unbound.");
+
     await nina.popup.locator("#message").fill("Cześć Jagodo, tu Nina (Sprint 3).");
     await nina.popup.locator("#send").click();
     await nina.popup.waitForFunction(()=>
@@ -157,12 +166,16 @@ async function main(){
     assert.equal(untouched.messages[0].attempts,0);
     console.log("MOCK CHROMIUM PRE-CLAIM GUARD PASS: missing composer leaves message queued.");
 
-    await jagoda.popup.locator("#chat-url").fill(chatUrl);
-    await jagoda.popup.locator("#bind-chatgpt").click();
-    await jagoda.popup.waitForFunction(() =>
-      document.querySelector("#chatgpt-status")?.textContent.includes("Przypięto") ||
-      document.querySelector("#chatgpt-status")?.textContent.includes("Zadanie"),
-      null,{timeout:13000});
+    // Simulate a global side panel sending an action while the actual ChatGPT
+    // tab stays active. Sending from the extension page via evaluate does not
+    // change active Chrome tab (unlike a normal tab popup click).
+    await dedicated.bringToFront();
+    const bindingResponse=await jagoda.popup.evaluate(
+      async () => await chrome.runtime.sendMessage({type:"BIND_ACTIVE_CHATGPT"}));
+    assert.ok(bindingResponse?.ok, bindingResponse?.error ||
+      "Could not bind the active ChatGPT tab");
+    assert.equal(bindingResponse.result.chatgpt?.chatUrl,chatUrl);
+    console.log("MOCK CHROMIUM ACTIVE-TAB BIND PASS: exact ChatGPT tab bound without URL copying.");
 
     let result=null;
     const deadline=Date.now()+28000;
