@@ -40,7 +40,7 @@ try {
     await new Promise(ok=>setTimeout(ok,150));
   }
   assert.equal(result.manifest.manifest_version,3);
-  assert.equal(result.manifest.version,"0.3.5");
+  assert.equal(result.manifest.version,"0.3.6");
   assert.ok(result.manifest.permissions.includes("sidePanel"));
   assert.equal(result.manifest.action.default_popup,undefined);
   assert.equal(result.path,"popup.html");
@@ -100,6 +100,25 @@ try {
   });
   assert.equal(persisted.token,fakeToken);
   assert.equal(persisted.config.conversationId,config.conversationId);
+
+  // Regression: the control page used by the user has a #chatgpt-title
+  // fragment and the FastAPI host may be unavailable. Both must yield a
+  // visible diagnosis, not an inert START button or a blank token field.
+  await page.goto(`chrome-extension://${extensionId}/popup.html#chatgpt-title`);
+  await page.waitForFunction(() =>
+    document.querySelector("#token-availability")?.textContent.includes("Token jest zapisany"),
+    null,{timeout:7000});
+  assert.equal(await page.locator("#token").inputValue(),"");
+  assert.equal(await page.locator("#start").isEnabled(),true);
+  await page.locator("#start").click();
+  await page.waitForFunction(() =>
+    document.querySelector("#control-feedback")?.dataset.error==="true" &&
+    (document.querySelector("#control-feedback")?.textContent?.length ?? 0)>8,
+    null,{timeout:15000});
+  const afterStart=await page.evaluate(()=>chrome.runtime.sendMessage({type:"GET_STATUS"}));
+  assert.equal(afterStart?.ok,true,"Hashed tab must remain a trusted control sender");
+  assert.equal(afterStart.result.active,false);
+  console.log("REAL CHROMIUM HASHED TAB + OFFLINE START PASS: token retained, visible inline failure.");
 
   let confirmDialogCount = 0;
   page.on("dialog", async dialog => {

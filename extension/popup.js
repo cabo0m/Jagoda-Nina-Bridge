@@ -10,6 +10,13 @@ function tell(text, isError = false) {
   const target = $("notice");
   target.textContent = text;
   target.dataset.error = isError ? "true" : "false";
+  // The old error location was above the long settings form. With remote
+  // desktop scrolling, START errors looked like clicks did nothing.
+  const nearby = $("control-feedback");
+  if (nearby) {
+    nearby.textContent = text || "Kliknij START albo wybierz nową rozmowę Bridge.";
+    nearby.dataset.error = isError ? "true" : "false";
+  }
 }
 
 function setBusy(value) {
@@ -83,6 +90,9 @@ function render(state) {
   const snapshot = state.snapshot ?? {};
   const conversation = snapshot.conversation ?? {};
   const connected = state.tokenReady && snapshot.lastSync && !snapshot.lastError;
+  $("token-availability").textContent = state.tokenReady
+    ? "Token jest zapisany w profilu Chrome. Pole poniżej celowo pozostaje puste. Nie trzeba kopiować go ponownie."
+    : "Brak zapisanego tokenu. Użyj „Przywróć token z hosta” lub wpisz token raz.";
   $("connection").textContent = !state.config
     ? "Nie skonfigurowano"
     : !state.tokenReady
@@ -131,7 +141,7 @@ function render(state) {
     ? `Zadanie ${state.bridgeJob.phase}: ${state.bridgeJob.error || state.bridgeJob.id}`
     : state.chatgpt
       ? `Przypięto kartę ${state.chatgpt.tabId}: ${state.chatgpt.chatUrl}`
-      : "Brak przypiętej rozmowy. Otwórz wątek ChatGPT i kliknij »Przypnij aktywną kartę«. UUID Bridge to inne pole.";
+      : "Brak przypiętej rozmowy. Otwórz wątek ChatGPT i kliknij »Znajdź i przypnij rozmowę ChatGPT«. UUID Bridge to inne pole.";
   $("send-hint").textContent = identity === "jagoda"
     ? snapshot.lastInboundId
       ? `Odpowiedź na wiadomość: ${snapshot.lastInboundId}`
@@ -179,8 +189,15 @@ $("config-form").addEventListener("submit", async event => {
       participant: $("participant").value,
       conversationId: $("conversation-id").value,
     });
-    if ($("token").value.trim().length < 32) {
-      throw new Error("Wklej token uczestniczki (minimum 32 znaki).");
+    const supplied = $("token").value.trim();
+    const previouslySaved = Boolean(lastState?.tokenReady &&
+      lastState.config?.participant === config.participant &&
+      lastState.config?.serverUrl === config.serverUrl);
+    if (!supplied && !previouslySaved) {
+      throw new Error("Brak zapisanego tokenu dla tej uczestniczki i serwera. Najpierw przywróć token z hosta.");
+    }
+    if (supplied && supplied.length < 32) {
+      throw new Error("Podany nowy token ma mniej niż 32 znaki.");
     }
   } catch (error) {
     tell(error.message, true);

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Jagoda–Nina Bridge (eksperyment)",
-  "version": "0.3.5",
-  "description": "Jagoda–Nina Bridge: odnajdywanie ChatGPT w innych kartach/oknach, wybór wątku i widoczne błędy przypinania.",
+  "version": "0.3.6",
+  "description": "Jagoda–Nina Bridge: obsługa sterowania z kart URL hash, czytelne błędy START i bezpieczne zachowanie tokenu.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",

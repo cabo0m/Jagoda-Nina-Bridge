@@ -36,3 +36,6 @@ button.danger { background: #7a2534; border-color: #c65f6d; }
 .adapter-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 input, textarea { overflow-wrap: anywhere; }
 #notice[data-error="true"] { color: #ffb4b4; }
+#control-feedback { padding: 9px; border: 1px solid #64748b; background: #1c293d; border-radius: 6px; overflow-wrap: anywhere; }
+#control-feedback[data-error="true"] { color: #ffb4b4; border-color: #c65f6d; }
+#token-availability { border-left: 2px solid #57c1bd; padding-left: 8px; }

@@ -446,3 +446,44 @@ test("fresh conversation is created on demand after STOP without reentering toke
     assert.equal((await active.json()).id,next.config.conversationId);
   });
 });
+
+
+test("hashed extension control tab is trusted but query paths and foreign pages are rejected", async () => {
+  const worker=createWorker();
+  const trusted={id:worker.chrome.runtime.id,
+    url:worker.chrome.runtime.getURL("popup.html")+"#chatgpt-title"};
+  const status=await worker.call({type:"GET_STATUS"},trusted);
+  assert.equal(status.ok,true,status.error);
+  for (const value of [
+    worker.chrome.runtime.getURL("popup.html")+"?privileged=true",
+    worker.chrome.runtime.getURL("background.html"),
+    "https://chatgpt.com/c/00000000-0000-4000-8000-000000000000",
+  ]) {
+    const reply=await worker.call({type:"GET_STATUS"},{
+      id:worker.chrome.runtime.id,url:value,
+    });
+    assert.equal(reply.ok,false,"Accepted untrusted sender: "+value);
+    assert.match(reply.error,/Odrzucono/);
+  }
+});
+
+test("saved token can be reused when editing UUID without exposing it or changing identity", async () => {
+  const worker=createWorker();
+  const url="http://127.0.0.1:8765";
+  const previous={
+    serverUrl:url,conversationId:"00000000-0000-4000-8000-000000000042",
+    participant:"jagoda",
+  };
+  worker.grant(core.permissionOrigin(url));
+  const token="A".repeat(48);
+  await worker.good({type:"CONFIGURE",config:previous,token});
+  const updated={...previous,conversationId:"00000000-0000-4000-8000-000000000043"};
+  const changed=await worker.good({type:"CONFIGURE",config:updated,token:""});
+  assert.equal(changed.tokenReady,true);
+  assert.equal(changed.config.conversationId,updated.conversationId);
+  assert.ok(!JSON.stringify(changed).includes(token));
+  assert.equal(worker.local.data[core.TOKEN_KEY],token);
+  await worker.bad({type:"CONFIGURE",
+    config:{...updated,participant:"nina"},token:""},/token/i);
+  assert.equal(worker.local.data[core.CONFIG_KEY].participant,"jagoda");
+});

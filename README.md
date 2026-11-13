@@ -9,7 +9,7 @@ Fanowski eksperyment komunikacji dwóch asystentek ChatGPT (Nina i Jagoda) przez
 - **Sprint 0:** analiza architektury i audyt Video Summary, wykonane.
 - **Sprint 1:** lokalny serwer FastAPI + SQLite WAL, tokeny dwóch uczestników, REST API, lease/ACK/idempotencja, STOP, rzeczywiste HTTP, wykonane i odebrane przez przejście do Sprintu 2.
 - **Sprint 2:** rozszerzenie Chrome MV3: konfiguracja Jagody/Niny, ręczny transport, automatyczne sprawdzanie skrzynki co ok. 30 s, START/STOP i ACK. Testy dwóch prawdziwych profili Chromium z lokalnym serwerem PASS. Oczekuje na odbiór właściciela.
-- **Sprint 3:** adapter dedykowanej rozmowy ChatGPT WWW zaimplementowany. **UX 0.3.5:** stały panel boczny, **wyszukiwanie otwartych wątków ChatGPT także gdy aktywna jest karta rozszerzenia**, czytelne błędy przypinania, priorytetowy STOP i trwały token. Po STOP można jednym kliknięciem przejść na nową rozmowę Bridge i uruchomić START bez przepisywania tokenu. Jednoklikowe odzyskiwanie tokenu z hosta pozostaje dostępne. **Brak jeszcze próby na prawdziwej, zalogowanej sesji ChatGPT, więc odbiór pozostaje otwarty.**
+- **Sprint 3:** adapter dedykowanej rozmowy ChatGPT WWW zaimplementowany. **UX 0.3.6:** stały panel boczny, szukanie otwartych wątków ChatGPT, poprawna obsługa poleceń z karty rozszerzenia z fragmentem URL, **błędy START widoczne bezpośrednio pod przyciskami** oraz jawny stan tokenu. Token jest trwały i można go zachować przy zmianie UUID, jeśli serwer i uczestniczka pozostają te same. Po STOP można jednym kliknięciem przejść na nową rozmowę Bridge i uruchomić START bez przepisywania tokenu. Jednoklikowe odzyskiwanie tokenu z hosta pozostaje dostępne. **Brak jeszcze próby na prawdziwej, zalogowanej sesji ChatGPT, więc odbiór pozostaje otwarty.**
 - Sprint 4: kontrolowany live E2E z rzeczywistymi sesjami (jeszcze nie rozpoczęte).
 - Sprint 5: dokumentacja i ewentualne udostępnienie na GitHub (tylko po oddzielnej zgodzie).
 
@@ -58,7 +58,7 @@ Szczegóły uprawnień, przechowywania tokenów i działania w `extension/README
 - `server/app`: API, schema SQLite, auth, provisioning.
 - `server/tests`: testy kontraktu, bezpieczeństwa i błędów.
 - `server/scripts`: test prawdziwego HTTP.
-- `extension`: rozszerzenie MV3 0.3.5, transport i dedykowany adapter ChatGPT, testy Chromium; instrukcje w `extension/README.md` oraz `extension/CHATGPT-ADAPTER.md`.
+- `extension`: rozszerzenie MV3 0.3.6, transport i dedykowany adapter ChatGPT, testy Chromium; instrukcje w `extension/README.md` oraz `extension/CHATGPT-ADAPTER.md`.
 - `docs/API.md`: kontrakt HTTP i stany.
 - `docs/SECURITY.md`: bezpieczeństwo i znane ograniczenia.
 - `docs/SPRINT2-RESULTS.md`: wyniki dwóch profili Chromium, automatycznego alarmu i STOP.

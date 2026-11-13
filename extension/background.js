@@ -206,7 +206,9 @@ async function configure(message) {
     throw new Error("Trwa lub wymaga wyjaśnienia rozpoczęta obsługa ChatGPT. Nie można skasować śladu zadania konfiguracją.");
   }
   const config = normalizeConfig(message.config);
-  const token = validateToken(message.token);
+  const reusableToken = previous.config?.serverUrl === config.serverUrl &&
+    previous.config?.participant === config.participant ? previous.token : null;
+  const token = validateToken(message.token || reusableToken);
   await ensurePermission(config); // The popup must request consent in a user gesture.
   await stopLocal();
   await chrome.storage.local.set({[CONFIG_KEY]: config, [TOKEN_KEY]: token});
@@ -713,9 +715,26 @@ async function handle(message) {
   }
 }
 
+function isExtensionControlSender(sender) {
+  // The same trusted extension page may be opened as a side panel or as a
+  // regular tab with a fragment such as #chatgpt-title. URL fragments change
+  // the visible section, not the page's identity.
+  if (sender?.id !== chrome.runtime.id || typeof sender.url !== "string") {
+    return false;
+  }
+  try {
+    const url = new URL(sender.url);
+    const expected = new URL(chrome.runtime.getURL("popup.html"));
+    return url.origin === expected.origin &&
+      url.pathname === expected.pathname &&
+      !url.search && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  const fromPopup = sender.id === chrome.runtime.id &&
-    sender.url === chrome.runtime.getURL("popup.html");
+  const fromPopup = isExtensionControlSender(sender);
   const fromBoundPage = sender.id === chrome.runtime.id &&
     sender.tab && sender.url?.startsWith("https://chatgpt.com/c/");
   const bridgeEvent = message?.type === "JNB_BRIDGE_RESULT" ||

@@ -26,8 +26,9 @@
         <label for="conversation-id">UUID rozmowy</label>
         <input id="conversation-id" type="text" autocomplete="off" spellcheck="false" required placeholder="00000000-0000-0000-0000-000000000000">
         <label for="token">Token (zapamiętywany lokalnie w tym profilu Chrome)</label>
-        <input id="token" type="password" autocomplete="off" required placeholder="Token wygenerowany przez serwer">
-        <button class="secondary" id="save" type="submit">Zapisz konfigurację i token</button>
+        <p id="token-availability" class="hint" role="status">Sprawdzam zapisany token…</p>
+        <input id="token" type="password" autocomplete="off" placeholder="Pozostaw puste, jeśli token już zapisany">
+        <button class="secondary" id="save" type="submit">Zapisz ustawienia (zachowaj token)</button>
         <button class="secondary primary-wide" id="recover-local" type="button">Przywróć token z hosta bez kopiowania</button>
         <p class="hint">Działa tylko dla Jagody na komputerze z serwerem Bridge. Nie wymaga wpisywania tokenu.</p>
       </form>
@@ -42,6 +43,7 @@
         <button class="secondary" id="sync" type="button">Odśwież</button>
         <button class="danger" id="stop" type="button" title="Natychmiast zatrzymaj lokalnie i wyślij STOP na serwer; bez dodatkowego okna">STOP TERAZ</button>
       </div>
+      <p id="control-feedback" class="hint" role="status" aria-live="polite">Status przycisków i błędy pojawią się tutaj.</p>
       <button id="use-current" class="secondary primary-wide" type="button">Nowa rozmowa Bridge + START (bez ponownego tokenu)</button>
       <p class="hint">START włącza synchronizację co ok. 30 s. STOP TERAZ działa bez okna potwierdzenia: od razu wyłącza lokalną synchronizację i próbuje zatrzymać rozmowę na serwerze. Sprawdź komunikat o potwierdzeniu.</p>
     </section>
