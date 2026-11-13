@@ -123,6 +123,22 @@ async function main(){
     await jagoda.context.route("https://chatgpt.com/**",route =>
       route.fulfill({status:200,contentType:"text/html; charset=utf-8",body:fixtureBody}));
 
+    // A ChatGPT tab that has not yet received a persistent /c/<UUID> URL
+    // must produce a specific, visible reason instead of doing nothing.
+    const home=await jagoda.context.newPage();
+    await home.goto("https://chatgpt.com/");
+    await jagoda.popup.bringToFront();
+    await jagoda.popup.locator("#bind-current-chatgpt").click();
+    await jagoda.popup.waitForFunction(() =>
+      document.querySelector("#chatgpt-feedback")?.textContent.includes("Żadna nie ma adresu /c/<UUID>"),
+      null,{timeout:9000});
+    assert.ok((await jagoda.popup.locator("#chatgpt-feedback").textContent())
+      .includes("Otwarte karty ChatGPT: 1"));
+    assert.ok((await jagoda.popup.locator("#chatgpt-status").textContent())
+      .includes("Brak przypiętej"));
+    await home.close();
+    console.log("MOCK CHROMIUM UNINITIALIZED CHAT PASS: open ChatGPT without /c/ gives precise inline error.");
+
     const irrelevant=await jagoda.context.newPage();
     await irrelevant.goto(otherUrl);
     const dedicated=await jagoda.context.newPage();
@@ -133,7 +149,7 @@ async function main(){
     await jagoda.popup.locator("#chat-url").fill("https://chatgpt.com/c/"+randomUUID());
     await jagoda.popup.locator("#bind-chatgpt").click();
     await jagoda.popup.waitForFunction(() =>
-      document.querySelector("#notice")?.textContent.includes("Otwórz podany wątek"),
+      document.querySelector("#chatgpt-feedback")?.textContent.includes("Otwórz podany wątek"),
       null,{timeout:9000});
     assert.equal((await httpJson(base,jagodaToken,"GET",`/v1/conversations/${conversationId}`)).message_count,0);
     console.log("MOCK CHROMIUM BIND SCOPE PASS: unrelated tabs do not bind.");
@@ -142,7 +158,7 @@ async function main(){
     await jagoda.popup.locator("#chat-url").fill(conversationId);
     await jagoda.popup.locator("#bind-chatgpt").click();
     await jagoda.popup.waitForFunction(() =>
-      document.querySelector("#notice")?.textContent.includes("Podaj pełny adres dedykowanej rozmowy ChatGPT"),
+      document.querySelector("#chatgpt-feedback")?.textContent.includes("Podaj pełny adres dedykowanej rozmowy ChatGPT"),
       null,{timeout:9000});
     assert.ok((await jagoda.popup.locator("#chatgpt-status").textContent()).includes("Brak przypiętej rozmowy"));
     console.log("MOCK CHROMIUM WRONG UUID PASS: inline error visible; status remains unbound.");
@@ -158,7 +174,7 @@ async function main(){
     await jagoda.popup.locator("#chat-url").fill(otherUrl);
     await jagoda.popup.locator("#bind-chatgpt").click();
     await jagoda.popup.waitForFunction(() =>
-      document.querySelector("#notice")?.textContent.includes("Brak gotowego edytora"),
+      document.querySelector("#chatgpt-feedback")?.textContent.includes("Brak gotowego edytora"),
       null,{timeout:9000});
     const untouched=await httpJson(base,jagodaToken,"GET","/v1/inbox");
     assert.equal(untouched.messages.length,1);
@@ -166,16 +182,28 @@ async function main(){
     assert.equal(untouched.messages[0].attempts,0);
     console.log("MOCK CHROMIUM PRE-CLAIM GUARD PASS: missing composer leaves message queued.");
 
-    // Simulate a global side panel sending an action while the actual ChatGPT
-    // tab stays active. Sending from the extension page via evaluate does not
-    // change active Chrome tab (unlike a normal tab popup click).
-    await dedicated.bringToFront();
-    const bindingResponse=await jagoda.popup.evaluate(
-      async () => await chrome.runtime.sendMessage({type:"BIND_ACTIVE_CHATGPT"}));
-    assert.ok(bindingResponse?.ok, bindingResponse?.error ||
-      "Could not bind the active ChatGPT tab");
-    assert.equal(bindingResponse.result.chatgpt?.chatUrl,chatUrl);
-    console.log("MOCK CHROMIUM ACTIVE-TAB BIND PASS: exact ChatGPT tab bound without URL copying.");
+    // Reproduce the user's failure: extension control is a NORMAL Chrome
+    // tab, so no ChatGPT thread is active in the control window. The previous
+    // code returned no candidates. Now display only matching ChatGPT tabs.
+    await jagoda.popup.bringToFront();
+    await jagoda.popup.locator("#bind-current-chatgpt").click();
+    await jagoda.popup.waitForFunction(() =>
+      document.querySelector("#chatgpt-feedback")?.textContent.includes("Wybierz właściwy"),
+      null,{timeout:9000});
+    assert.equal(await jagoda.popup.locator("#chatgpt-choices").isVisible(),true);
+    const matches=await jagoda.popup.locator("#chatgpt-tab-choice option").evaluateAll(
+      nodes=>nodes.map(n=>({value:n.value,text:n.textContent})));
+    assert.equal(matches.length,2,"Expected two real scoped ChatGPT tab choices");
+    const selection=matches.find(o=>o.text.includes(chatUrl.split("/").pop().slice(0,8)));
+    assert.ok(selection,"Expected dedicated chat in scoped selector");
+    await jagoda.popup.locator("#chatgpt-tab-choice").selectOption(selection.value);
+    await jagoda.popup.locator("#bind-selected-chatgpt").click();
+    await jagoda.popup.waitForFunction(() =>
+      document.querySelector("#chatgpt-status")?.textContent.includes("Przypięto kartę"),
+      null,{timeout:12000});
+    assert.ok((await jagoda.popup.locator("#chatgpt-feedback").textContent()).includes("Przypięto wątek"));
+    assert.equal((await jagoda.popup.locator("#chat-url").inputValue()),chatUrl);
+    console.log("MOCK CHROMIUM NON-ACTIVE TAB BIND PASS: control page focused, two ChatGPT tabs, explicit scoped picker, visible status.");
 
     let result=null;
     const deadline=Date.now()+28000;

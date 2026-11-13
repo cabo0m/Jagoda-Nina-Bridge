@@ -25,6 +25,12 @@ button.danger { background: #7a2534; border-color: #c65f6d; }
 #notice { position: sticky; top: 0; z-index: 20; margin: 0; padding: 9px 0; background: #101827; color: #c8e9e5; white-space: pre-wrap; overflow-wrap: anywhere; }
 #notice:empty { display: none; }
 #chatgpt-status { font-weight: 600; overflow-wrap: anywhere; }
+#chatgpt-feedback { padding: 10px; border: 1px solid #64748b; border-radius: 6px; background: #1c293d; color: #edf2fa; overflow-wrap: anywhere; }
+#chatgpt-feedback[data-error="true"] { border-color: #e78383; color: #ffd6d6; }
+#chatgpt-feedback[data-busy="true"] { border-color: #57c1bd; color: #a9f5ef; }
+#chatgpt-choices { padding: 8px 0; }
+#chatgpt-choices[hidden] { display: none; }
+#bind-selected-chatgpt { margin: 8px 0; }
 #bind-current-chatgpt { display: block; width: 100%; margin: 10px 0; }
 .controls button { min-width: 0; overflow-wrap: anywhere; }
 .adapter-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }

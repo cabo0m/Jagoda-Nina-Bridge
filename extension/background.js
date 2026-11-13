@@ -470,7 +470,24 @@ async function ensureChatBridge(binding) {
   }
 }
 
-async function bindChatGPT(value) {
+async function discoverChatGPTTabs() {
+  // Only inspect exact ChatGPT conversation URLs, never browser history
+  // or unrelated tabs. Do not read message content until a tab is selected.
+  const tabs = await chrome.tabs.query({url: "https://chatgpt.com/c/*"});
+  return tabs.flatMap(tab => {
+    if (!Number.isInteger(tab.id) || typeof tab.url !== "string") return [];
+    try {
+      return [{
+        tabId: tab.id,
+        chatUrl: normalizeThreadUrl(tab.url),
+        active: Boolean(tab.active),
+        windowId: Number.isInteger(tab.windowId) ? tab.windowId : null,
+      }];
+    } catch { return []; }
+  });
+}
+
+async function bindChatGPT(value, selectedTabId = null) {
   const chatUrl = normalizeThreadUrl(value);
   const state = await getConfig();
   const {config} = requireSession(state);
@@ -487,8 +504,10 @@ async function bindChatGPT(value) {
   // Only query ChatGPT tabs; chrome.scripting only receives a matching tab ID.
   const candidates = await chrome.tabs.query({url: chatUrl + "*"});
   const exact = candidates.filter(tab => {
-    try { return normalizeThreadUrl(tab.url) === chatUrl; }
-    catch { return false; }
+    try {
+      return normalizeThreadUrl(tab.url) === chatUrl &&
+        (selectedTabId === null || tab.id === selectedTabId);
+    } catch { return false; }
   });
   if (exact.length !== 1) {
     throw new Error(exact.length
@@ -515,16 +534,39 @@ async function bindActiveChatGPT() {
   if (!state.active) {
     throw new Error("Najpierw kliknij START.");
   }
-  // No account-wide tab enumeration. Only inspect a currently active
-  // tab with permission already granted to the ChatGPT origin.
-  const active = await chrome.tabs.query({
-    active: true, currentWindow: true, url: "https://chatgpt.com/*",
-  });
-  if (active.length !== 1 || typeof active[0].url !== "string") {
-    throw new Error("Przełącz główną kartę Chrome na otwartą rozmowę ChatGPT, a potem kliknij przypinanie.");
+  const candidates = await discoverChatGPTTabs();
+  if (!candidates.length) {
+    const chatgptTabs = await chrome.tabs.query({url: "https://chatgpt.com/*"});
+    if (chatgptTabs.length) {
+      throw new Error("Otwarte karty ChatGPT: " + chatgptTabs.length +
+        ". Żadna nie ma adresu /c/<UUID>. " +
+        "Otwórz zapisaną rozmowę z historii ChatGPT lub utwórz nową " +
+        "i wyślij wiadomość inicjującą, aby otrzymać stały adres.");
+    }
+    throw new Error("Nie wykryłam żadnej karty ChatGPT w tym profilu Chrome. " +
+      "Otwórz https://chatgpt.com, a następnie zapisaną rozmowę.");
   }
-  const url = normalizeThreadUrl(active[0].url);
-  return await bindChatGPT(url);
+  // Current popup can itself be the active tab, so don't require an active
+  // ChatGPT tab in the popup's window. Choose automatically only when unique.
+  const active = candidates.filter(tab => tab.active);
+  const choice = active.length === 1 ? active[0] :
+    candidates.length === 1 ? candidates[0] : null;
+  if (!choice) {
+    return {selectionRequired: true, candidates};
+  }
+  return await bindChatGPT(choice.chatUrl, choice.tabId);
+}
+
+async function bindSelectedChatGPT(tabId) {
+  if (!Number.isInteger(tabId) || tabId < 0) {
+    throw new Error("Nie wybrano poprawnej karty ChatGPT.");
+  }
+  const options = await discoverChatGPTTabs();
+  const selected = options.find(item => item.tabId === tabId);
+  if (!selected) {
+    throw new Error("Wybrana karta ChatGPT nie jest już otwarta. Ponów wyszukiwanie.");
+  }
+  return await bindChatGPT(selected.chatUrl, selected.tabId);
 }
 
 async function unbindChatGPT() {
@@ -664,6 +706,7 @@ async function handle(message) {
     case "ACK": return await ack(message.messageId);
     case "BIND_CHATGPT": return await bindChatGPT(message.chatUrl);
     case "BIND_ACTIVE_CHATGPT": return await bindActiveChatGPT();
+    case "BIND_SELECTED_CHATGPT": return await bindSelectedChatGPT(message.tabId);
     case "UNBIND_CHATGPT": return await unbindChatGPT();
     case "STOP": return await stop();
     default: throw new Error("Nieznana operacja rozszerzenia.");

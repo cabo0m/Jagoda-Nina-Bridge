@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Jagoda–Nina Bridge (eksperyment)",
-  "version": "0.3.4",
-  "description": "Jagoda–Nina Bridge: panel boczny, STOP i przełączanie na nową rozmowę bez utraty tokenu.",
+  "version": "0.3.5",
+  "description": "Jagoda–Nina Bridge: odnajdywanie ChatGPT w innych kartach/oknach, wybór wątku i widoczne błędy przypinania.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",

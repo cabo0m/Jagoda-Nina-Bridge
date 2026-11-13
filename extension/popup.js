@@ -15,7 +15,7 @@ function tell(text, isError = false) {
 function setBusy(value) {
   busy = value;
   // Emergency STOP must never be disabled by a concurrent operation.
-  for (const id of ["save", "recover-local", "use-current", "start", "sync", "send", "bind-chatgpt", "bind-current-chatgpt", "unbind-chatgpt"]) {
+  for (const id of ["save", "recover-local", "use-current", "start", "sync", "send", "bind-chatgpt", "bind-current-chatgpt", "bind-selected-chatgpt", "unbind-chatgpt"]) {
     $(id).disabled = value;
   }
 }
@@ -124,6 +124,7 @@ function render(state) {
   $("bind-chatgpt").disabled = busy || !state.active || identity !== "jagoda" ||
     Boolean(state.bridgeJob) || Boolean(state.chatgpt);
   $("bind-current-chatgpt").disabled = $("bind-chatgpt").disabled;
+  $("bind-selected-chatgpt").disabled = $("bind-chatgpt").disabled;
   $("unbind-chatgpt").disabled = busy || !state.chatgpt || Boolean(state.bridgeJob);
   if (state.chatgpt && !$("chat-url").value) $("chat-url").value = state.chatgpt.chatUrl;
   $("chatgpt-status").textContent = state.bridgeJob
@@ -236,18 +237,68 @@ $("send-form").addEventListener("submit", event => {
   });
 });
 
-$("bind-current-chatgpt").addEventListener("click", () => void doAction(async () => {
-  const result = await call("BIND_ACTIVE_CHATGPT");
-  if (result.chatgpt?.chatUrl) $("chat-url").value = result.chatgpt.chatUrl;
-  tell("Przypięłam aktualnie otwartą kartę ChatGPT. Adres powiązano z Jagodą.");
-  return result;
-}));
+function chatFeedback(text, isError = false, pending = false) {
+  const node = $("chatgpt-feedback");
+  node.textContent = text;
+  node.dataset.error = String(isError);
+  node.dataset.busy = String(pending);
+}
 
-$("bind-chatgpt").addEventListener("click", () => void doAction(async () => {
-  const result = await call("BIND_CHATGPT", {chatUrl: $("chat-url").value});
-  tell("Przypięto dedykowaną rozmowę ChatGPT. Jagoda może odpowiedzieć na wiadomość Niny.");
-  return result;
-}));
+function showChatTabChoices(candidates) {
+  const select = $("chatgpt-tab-choice");
+  select.replaceChildren();
+  for (const tab of candidates) {
+    const option = document.createElement("option");
+    option.value = String(tab.tabId);
+    const threadId = String(tab.chatUrl).split("/").pop().slice(0, 8);
+    option.textContent = `Wątek ${threadId}… · karta ${tab.tabId}${tab.active ? " · aktywna" : ""}`;
+    select.append(option);
+  }
+  $("chatgpt-choices").hidden = !candidates.length;
+}
+
+async function bindWithFeedback(type, payload = {}) {
+  if (busy) {
+    chatFeedback("Trwa inna operacja panelu. Poczekaj na jej zakończenie.", true);
+    return;
+  }
+  setBusy(true);
+  chatFeedback("Sprawdzam otwarte karty i gotowość edytora ChatGPT…", false, true);
+  try {
+    const result = await call(type, payload);
+    if (result?.selectionRequired && Array.isArray(result.candidates)) {
+      showChatTabChoices(result.candidates);
+      chatFeedback(`Znalazłam ${result.candidates.length} otwarte wątki. Wybierz właściwy z listy i kliknij „Przypnij wybraną kartę”.`);
+    } else {
+      const state = result?.snapshot ? result : await call("GET_STATUS");
+      render(state);
+      if (!state.chatgpt) {
+        throw new Error("Brak potwierdzenia przypięcia w stanie rozszerzenia.");
+      }
+      $("chat-url").value = state.chatgpt.chatUrl;
+      $("chatgpt-choices").hidden = true;
+      chatFeedback("Przypięto wątek ChatGPT. Powiązanie z Bridge jest aktywne.");
+    }
+  } catch (error) {
+    chatFeedback("Nie przypięto: " + String(error?.message || error).slice(0, 320), true);
+    try { render(await call("GET_STATUS")); }
+    catch { /* Keep the visible error when the worker is unavailable. */ }
+  } finally {
+    setBusy(false);
+    if (lastState) render(lastState);
+  }
+}
+
+$("bind-current-chatgpt").addEventListener("click", () =>
+  void bindWithFeedback("BIND_ACTIVE_CHATGPT"));
+
+$("bind-selected-chatgpt").addEventListener("click", () =>
+  void bindWithFeedback("BIND_SELECTED_CHATGPT", {
+    tabId: Number($("chatgpt-tab-choice").value),
+  }));
+
+$("bind-chatgpt").addEventListener("click", () =>
+  void bindWithFeedback("BIND_CHATGPT", {chatUrl: $("chat-url").value}));
 
 $("unbind-chatgpt").addEventListener("click", () => void doAction(async () => {
   const result = await call("UNBIND_CHATGPT");

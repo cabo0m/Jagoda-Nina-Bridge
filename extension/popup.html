@@ -47,8 +47,14 @@
     </section>
     <section aria-labelledby="chatgpt-title">
       <h2 id="chatgpt-title">Adapter ChatGPT (Sprint 3)</h2>
-      <p class="hint">To nie jest UUID rozmowy Bridge. Otwórz dedykowany wątek ChatGPT w głównej karcie przeglądarki, a następnie kliknij:</p>
-      <button id="bind-current-chatgpt" class="primary-wide" type="button">Przypnij aktywną kartę ChatGPT</button>
+      <p class="hint">Rozmowa Bridge i wątek ChatGPT mają dwa różne identyfikatory. Wątek ChatGPT może być w innej karcie lub oknie tego samego profilu Chrome.</p>
+      <button id="bind-current-chatgpt" class="primary-wide" type="button">Znajdź i przypnij rozmowę ChatGPT</button>
+      <p id="chatgpt-feedback" class="hint" role="status" aria-live="polite">Kliknij przycisk, aby sprawdzić otwarte wątki ChatGPT.</p>
+      <div id="chatgpt-choices" hidden>
+        <label for="chatgpt-tab-choice">Wykryto kilka rozmów. Wybierz właściwą:</label>
+        <select id="chatgpt-tab-choice"></select>
+        <button id="bind-selected-chatgpt" type="button" class="primary-wide">Przypnij wybraną kartę</button>
+      </div>
       <p class="hint">Ewentualnie wklej pełny adres https://chatgpt.com/c/... i kliknij Przypnij:</p>
       <label for="chat-url">Dedykowana rozmowa ChatGPT</label>
       <input id="chat-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://chatgpt.com/c/00000000-0000-0000-0000-000000000000">

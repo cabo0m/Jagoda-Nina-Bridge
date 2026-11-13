@@ -40,7 +40,7 @@ try {
     await new Promise(ok=>setTimeout(ok,150));
   }
   assert.equal(result.manifest.manifest_version,3);
-  assert.equal(result.manifest.version,"0.3.4");
+  assert.equal(result.manifest.version,"0.3.5");
   assert.ok(result.manifest.permissions.includes("sidePanel"));
   assert.equal(result.manifest.action.default_popup,undefined);
   assert.equal(result.path,"popup.html");
